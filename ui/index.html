@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBC Email Agent — Audit Request Tracker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f7fa; color: #1a1a2e; }
+
+        .header { background: #1a1a2e; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.2rem; font-weight: 600; }
+        .header .cost { font-size: 0.9rem; opacity: 0.8; }
+
+        .nav { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; background: white; padding: 0 2rem; }
+        .nav button { padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .nav button.active { border-bottom-color: #2563eb; color: #2563eb; font-weight: 600; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+        /* Tracker View */
+        .tracker-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .tracker-table th { background: #f8fafc; padding: 0.75rem 1rem; text-align: left; font-size: 0.85rem; text-transform: uppercase; color: #64748b; }
+        .tracker-table td { padding: 0.75rem 1rem; border-top: 1px solid #f1f5f9; font-size: 0.9rem; }
+        .tracker-table tr:hover { background: #f8fafc; cursor: pointer; }
+
+        .status-badge { padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500; }
+        .status-not-started { background: #f1f5f9; color: #64748b; }
+        .status-received { background: #dcfce7; color: #166534; }
+        .status-insufficient { background: #fef3c7; color: #92400e; }
+        .status-under-review { background: #dbeafe; color: #1e40af; }
+        .status-complete { background: #d1fae5; color: #065f46; }
+
+        /* Trace View */
+        .trace-panel { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .trace-step { border-left: 3px solid #e0e0e0; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+        .trace-step.plan { border-left-color: #2563eb; }
+        .trace-step.extraction { border-left-color: #7c3aed; }
+        .trace-step.verification { border-left-color: #059669; }
+        .trace-step.followup { border-left-color: #d97706; }
+        .trace-phase { font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: #64748b; }
+        .trace-decision { font-weight: 500; margin: 0.25rem 0; }
+        .trace-reasoning { font-size: 0.85rem; color: #475569; }
+        .tool-call { background: #f8fafc; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; font-family: monospace; font-size: 0.8rem; }
+
+        /* Follow-up View */
+        .followup-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .followup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .followup-body { background: #f8fafc; padding: 1rem; border-radius: 4px; white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; }
+        .followup-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+        .btn-approve { background: #059669; color: white; }
+        .btn-reject { background: #dc2626; color: white; }
+        .btn-edit { background: #2563eb; color: white; }
+        .btn-run { background: #2563eb; color: white; padding: 0.75rem 1.5rem; font-size: 1rem; }
+
+        .verdict { padding: 0.5rem 1rem; border-radius: 6px; margin-top: 0.5rem; }
+        .verdict-sufficient { background: #dcfce7; border: 1px solid #86efac; }
+        .verdict-insufficient { background: #fef3c7; border: 1px solid #fcd34d; }
+
+        .hidden { display: none; }
+        .loading { text-align: center; padding: 3rem; color: #64748b; }
+
+        .run-controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
+        .run-controls input { padding: 0.5rem; border: 1px solid #e0e0e0; border-radius: 4px; flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PBC Email Agent — Audit Request Tracker</h1>
+        <div class="cost" id="cost-display">Cost: $0.00 / $2.00</div>
+    </div>
+
+    <div class="nav">
+        <button class="active" onclick="showView('tracker')">Tracker</button>
+        <button onclick="showView('traces')">Agent Traces</button>
+        <button onclick="showView('followups')">Follow-ups</button>
+    </div>
+
+    <div class="container">
+        <!-- Run Controls -->
+        <div class="run-controls" id="run-controls">
+            <input type="text" id="data-dir" placeholder="Data directory path (or set PBC_DATA_DIR env var)">
+            <button class="btn btn-run" onclick="startRun()">▶ Run Agent</button>
+        </div>
+
+        <!-- Tracker View -->
+        <div id="view-tracker">
+            <table class="tracker-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                        <th>Evidence</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody id="tracker-body">
+                    <tr><td colspan="6" class="loading">Run the agent to see results</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Traces View -->
+        <div id="view-traces" class="hidden">
+            <div id="traces-container">
+                <p class="loading">Run the agent to see traces</p>
+            </div>
+        </div>
+
+        <!-- Follow-ups View -->
+        <div id="view-followups" class="hidden">
+            <div id="followups-container">
+                <p class="loading">Run the agent to see follow-up drafts</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentView = 'tracker';
+
+        function showView(view) {
+            document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+
+            document.getElementById('view-tracker').classList.toggle('hidden', view !== 'tracker');
+            document.getElementById('view-traces').classList.toggle('hidden', view !== 'traces');
+            document.getElementById('view-followups').classList.toggle('hidden', view !== 'followups');
+            currentView = view;
+        }
+
+        async function startRun() {
+            const dataDir = document.getElementById('data-dir').value;
+            const btn = document.querySelector('.btn-run');
+            btn.textContent = '⏳ Running...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({data_dir: dataDir, max_cost_usd: 2.0})
+                });
+                const result = await resp.json();
+
+                if (resp.ok) {
+                    btn.textContent = '✓ Complete';
+                    await loadTracker();
+                    await loadTraces();
+                    await loadFollowups();
+                    await loadCost();
+                } else {
+                    btn.textContent = '✗ Error';
+                    alert(result.detail || 'Run failed');
+                }
+            } catch (e) {
+                btn.textContent = '✗ Error';
+                alert('Network error: ' + e.message);
+            }
+
+            setTimeout(() => { btn.textContent = '▶ Run Agent'; btn.disabled = false; }, 3000);
+        }
+
+        async function loadTracker() {
+            const resp = await fetch('/api/tracker');
+            const data = await resp.json();
+            const tbody = document.getElementById('tracker-body');
+
+            tbody.innerHTML = Object.values(data.items).map(item => `
+                <tr onclick="showItemTrace('${item.id}')">
+                    <td><strong>${item.id}</strong></td>
+                    <td>${item.category}</td>
+                    <td>${item.description.substring(0, 80)}...</td>
+                    <td><span class="status-badge status-${item.status.toLowerCase().replace(/ /g, '-')}">${item.status}</span></td>
+                    <td>${item.evidence.map(e => e.filename).join(', ') || '—'}</td>
+                    <td>${item.evidence.length > 0 ? (item.evidence[0].confidence * 100).toFixed(0) + '%' : '—'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadTraces() {
+            const resp = await fetch('/api/traces');
+            const traces = await resp.json();
+            const container = document.getElementById('traces-container');
+
+            container.innerHTML = traces.map(trace => `
+                <div class="trace-panel">
+                    <h3>${trace.subject || trace.email_id}</h3>
+                    <p style="font-size:0.85rem;color:#64748b;margin:0.5rem 0;">
+                        Affected items: ${trace.affected_items.join(', ') || 'none'}
+                    </p>
+                    ${trace.steps.map(step => `
+                        <div class="trace-step ${step.phase}">
+                            <div class="trace-phase">${step.phase}</div>
+                            <div class="trace-decision">${step.decision}</div>
+                            <div class="trace-reasoning">${step.reasoning}</div>
+                            ${step.tool_call ? `<div class="tool-call">🔧 ${step.tool_call.tool_name}(${JSON.stringify(step.tool_call.tool_input).substring(0, 100)}...)</div>` : ''}
+                        </div>
+                    `).join('')}
+                    ${trace.verifier_verdicts.map(v => `
+                        <div class="verdict verdict-${v.verdict}">
+                            <strong>Verifier [${v.item_id}]:</strong> ${v.verdict}<br>
+                            <span style="font-size:0.85rem">${v.reasoning}</span>
+                            ${v.missing.length ? `<br><em>Missing: ${v.missing.join(', ')}</em>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        async function loadFollowups() {
+            const resp = await fetch('/api/followups');
+            const followups = await resp.json();
+            const container = document.getElementById('followups-container');
+
+            if (followups.length === 0) {
+                container.innerHTML = '<p class="loading">No follow-ups needed</p>';
+                return;
+            }
+
+            container.innerHTML = followups.map((fu, idx) => `
+                <div class="followup-card">
+                    <div class="followup-header">
+                        <div>
+                            <strong>To:</strong> ${fu.recipient_name} &lt;${fu.recipient_email}&gt;<br>
+                            <strong>Subject:</strong> ${fu.subject}<br>
+                            <strong>Items:</strong> ${(fu.items_covered || []).join(', ')}
+                        </div>
+                        <span class="status-badge ${fu.approved ? 'status-complete' : fu.rejected ? 'status-insufficient' : 'status-under-review'}">
+                            ${fu.approved ? 'Approved' : fu.rejected ? 'Rejected' : 'Pending'}
+                        </span>
+                    </div>
+                    <div class="followup-body">${fu.body}</div>
+                    <div class="followup-actions">
+                        <button class="btn btn-approve" onclick="approveFollowup(${idx})">✓ Approve & Send</button>
+                        <button class="btn btn-reject" onclick="rejectFollowup(${idx})">✗ Reject</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadCost() {
+            const resp = await fetch('/api/cost');
+            const cost = await resp.json();
+            document.getElementById('cost-display').textContent =
+                `Cost: $${cost.total_cost_usd.toFixed(2)} / $2.00 | Tokens: ${cost.input_tokens + cost.output_tokens}`;
+        }
+
+        async function approveFollowup(idx) {
+            await fetch(`/api/followups/${idx}/approve`, {method: 'POST'});
+            await loadFollowups();
+        }
+
+        async function rejectFollowup(idx) {
+            await fetch(`/api/followups/${idx}/reject`, {method: 'POST'});
+            await loadFollowups();
+        }
+
+        function showItemTrace(itemId) {
+            showView('traces');
+            document.querySelectorAll('.nav button')[1].classList.add('active');
+            document.querySelectorAll('.nav button')[0].classList.remove('active');
+        }
+    </script>
+</body>
+</html>
