@@ -108,6 +108,12 @@ async def start_run(config: RunConfig):
 
     return {
         "status": "complete",
+        "offline": current_run.offline,
+        "note": (
+            "Offline mode: no ANTHROPIC_API_KEY set. Ingested deterministically; "
+            "set the key to run the full agent loop and classify evidence."
+            if current_run.offline else "Full agent run complete."
+        ),
         "items_processed": len(pbc_items),
         "emails_processed": len(emails),
         "cost_usd": current_run.cost.cost_usd,

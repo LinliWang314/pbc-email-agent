@@ -18,6 +18,7 @@ Model routing for cost control:
 """
 
 import json
+import os
 import time
 from typing import Any
 from dataclasses import dataclass, field
@@ -57,6 +58,7 @@ class AgentRun:
     traces: list[AgentTrace] = field(default_factory=list)
     cost: CostTracker = field(default_factory=CostTracker)
     config: AgentConfig = field(default_factory=AgentConfig)
+    offline: bool = False
 
 
 def run_agent(
@@ -72,9 +74,30 @@ def run_agent(
     if config is None:
         config = AgentConfig()
 
-    client = Anthropic()
     tracker = TrackerState(items={item.id: item for item in pbc_items})
     run = AgentRun(tracker=tracker, config=config)
+
+    # Offline/mock mode: no API key. Ingest deterministically and return the
+    # parsed tracker so the deployed app is inspectable without LLM spend.
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        run.offline = True
+        trace = AgentTrace(
+            email_id="offline_mode",
+            subject="Offline mode — no ANTHROPIC_API_KEY set",
+        )
+        trace.add_step(TraceStep(
+            phase="plan",
+            decision="offline",
+            reasoning=(
+                f"No API key configured. Ingested {len(pbc_items)} PBC items and "
+                f"{len(emails)} emails deterministically. Set ANTHROPIC_API_KEY to run "
+                "the full plan → act → verify agent loop and classify evidence."
+            ),
+        ))
+        run.traces.append(trace)
+        return run
+
+    client = Anthropic()
 
     # Phase 1: Process each email through the planning agent
     for email in sorted(emails, key=lambda e: e.date):
