@@ -180,7 +180,17 @@ def execute_tool(
     run: Any,
     email: Any,
 ) -> Any:
-    """Dispatch a tool call to its implementation."""
+    """
+    Dispatch a tool call to its implementation.
+
+    Parsed documents are cached on the run (run.parsed_documents) so that when the
+    agent later cites a value, update_item_status can deterministically verify the
+    citation against the actual parsed content — the core anti-hallucination guardrail.
+    """
+    # Ensure a per-run parsed-document cache exists
+    if not hasattr(run, "parsed_documents"):
+        run.parsed_documents = {}
+
     dispatch = {
         "parse_pdf": parse_pdf,
         "parse_excel": parse_excel,
@@ -196,6 +206,12 @@ def execute_tool(
         return {"error": f"Unknown tool: {tool_name}"}
 
     try:
-        return handler(**tool_input)
+        result = handler(**tool_input)
+        # Cache parse outputs by filename for later citation verification
+        if tool_name in ("parse_pdf", "parse_excel", "ocr_image"):
+            filename = tool_input.get("filename")
+            if filename and isinstance(result, dict) and "error" not in result:
+                run.parsed_documents[filename] = result
+        return result
     except Exception as e:
         return {"error": f"Tool {tool_name} failed: {str(e)}"}

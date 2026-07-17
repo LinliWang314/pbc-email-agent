@@ -30,6 +30,7 @@ from agent.ingest import (
     load_pbc_list,
     load_client_profile,
 )
+from agent.pbc_parser import parse_pbc_list_llm
 from tools.parsers import set_attachments_dir
 
 load_dotenv()
@@ -63,7 +64,8 @@ async def start_run(config: RunConfig):
                 pbc_path = os.path.join(data_dir, f)
                 break
 
-    pbc_items = load_pbc_list(pbc_path)
+    # Free-form PBC lists require LLM structuring; falls back to regex if no API key
+    pbc_items = parse_pbc_list_llm(pbc_path)
 
     # Load client profile
     profile_path = os.path.join(data_dir, "Client_Profile.pdf")
@@ -239,4 +241,5 @@ if ui_dir.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

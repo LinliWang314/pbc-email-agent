@@ -4,6 +4,7 @@ Tracker operation tools — update and query the PBC tracker state.
 
 from typing import Any
 from agent.models import Evidence
+from tools.citation_verify import verify_extraction
 
 
 def update_item_status(
@@ -29,12 +30,21 @@ def update_item_status(
         return {"error": f"Item {item_id} not found"}
 
     # Record evidence if a file was provided
+    citation_check = None
     if evidence_filename:
+        # --- Anti-hallucination guardrail: verify claimed citations against parsed content ---
+        confidence = 0.5  # default when we have no document to check against
+        parsed_doc = getattr(run, "parsed_documents", {}).get(evidence_filename)
+        if parsed_doc and citations:
+            citation_check = verify_extraction(extracted_fields or {}, citations, parsed_doc)
+            confidence = citation_check["citation_confidence"]
+
         evidence = Evidence(
             filename=evidence_filename,
             source_email_id=source_email_id or (email.message_id if email else "unknown"),
             extracted_fields=extracted_fields or {},
             citations=citations or [],
+            confidence=confidence,
         )
 
         # Version tracking: check if this supersedes an existing file
@@ -48,17 +58,34 @@ def update_item_status(
 
         item.evidence.append(evidence)
 
-    # Update status (but don't downgrade from a better status)
-    status_order = ["Not started", "Received", "Under review", "Insufficient", "Complete"]
-    # Allow any status update — the verifier will correct if needed
+        # --- Confidence-based degradation ---
+        # If a citation was fabricated (value not found in the document), we cannot
+        # trust the extraction. Don't let the agent mark it Received/Complete on the
+        # strength of unverifiable evidence — downgrade to Under review for a human.
+        if citation_check and citation_check["has_fabrication"] and status in ("Received", "Complete"):
+            status = "Under review"
+            reasoning += (
+                f" [GUARDRAIL: {citation_check['total_citations'] - citation_check['verified_citations']} "
+                f"of {citation_check['total_citations']} citations could not be verified against the "
+                f"document; downgraded to Under review for human confirmation.]"
+            )
+
     item.status = status
 
-    return {
+    result = {
         "item_id": item_id,
         "new_status": status,
         "evidence_count": len(item.evidence),
         "reasoning": reasoning,
     }
+    if citation_check:
+        result["citation_verification"] = {
+            "verified": citation_check["verified_citations"],
+            "total": citation_check["total_citations"],
+            "confidence": citation_check["citation_confidence"],
+            "has_fabrication": citation_check["has_fabrication"],
+        }
+    return result
 
 
 def get_item_status(item_id: str, run: Any = None) -> dict[str, Any]:
