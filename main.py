@@ -51,9 +51,11 @@ async def start_run(config: RunConfig):
     """Process a mailbox against the PBC list."""
     global current_run
 
-    data_dir = config.data_dir or os.environ.get("PBC_DATA_DIR", "")
-    if not data_dir:
-        raise HTTPException(400, "No data directory specified. Set PBC_DATA_DIR or pass data_dir.")
+    # Resolve data dir: explicit arg > env var > bundled sample_data/
+    bundled = str(Path(__file__).parent / "sample_data")
+    data_dir = config.data_dir or os.environ.get("PBC_DATA_DIR", "") or bundled
+    if not os.path.isdir(data_dir):
+        raise HTTPException(400, f"Data directory not found: {data_dir}")
 
     # Load PBC list
     pbc_path = os.path.join(data_dir, "PBC_List_FY2026.pdf")
