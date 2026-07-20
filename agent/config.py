@@ -8,17 +8,35 @@ from dataclasses import dataclass
 
 def make_client():
     """
-    Build an Anthropic client with generous retries + timeout.
+    Build an Anthropic client with generous retries + timeout, and force IPv4.
 
-    Some hosting environments have flaky or rate-limited egress to the API; the SDK's
-    built-in retry with backoff smooths over transient APIConnectionError blips instead
-    of failing the whole run on the first hiccup.
+    Diagnostics on some hosts (e.g. Railway) showed DNS + a raw IPv4 TLS socket to
+    api.anthropic.com succeed, yet the SDK's httpx client failed with APIConnectionError.
+    Root cause: the host advertises a AAAA (IPv6) record, httpx tries IPv6 first, and the
+    container's IPv6 egress is broken — so every request hangs/fails on the IPv6 attempt.
+    We pin the httpx transport to IPv4 (local_address="0.0.0.0"), which resolves it.
+    Set PBC_FORCE_IPV4=0 to disable.
     """
     from anthropic import Anthropic
-    return Anthropic(
+
+    kwargs = dict(
         max_retries=int(os.environ.get("ANTHROPIC_MAX_RETRIES", "5")),
         timeout=float(os.environ.get("ANTHROPIC_TIMEOUT", "60")),
     )
+
+    if os.environ.get("PBC_FORCE_IPV4", "1") == "1":
+        try:
+            import httpx
+            # Binding the source address to an IPv4 any-address forces IPv4 egress.
+            transport = httpx.HTTPTransport(local_address="0.0.0.0", retries=2)
+            kwargs["http_client"] = httpx.Client(
+                transport=transport,
+                timeout=kwargs["timeout"],
+            )
+        except Exception:
+            pass  # fall back to default client if httpx internals change
+
+    return Anthropic(**kwargs)
 
 
 @dataclass
