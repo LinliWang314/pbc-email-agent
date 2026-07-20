@@ -326,27 +326,28 @@ def verify_item(
     system_prompt = """You are an audit verification agent. Decide whether the evidence
 collected for a PBC item satisfies its acceptance criteria.
 
-Return one of three verdicts:
+Return one of four verdicts:
 - "sufficient": the evidence reasonably satisfies the request. If the item asks for a
   single document (e.g. a fixed-asset register, an AR aging, a signed memo) and that
   document was received and matches the entity/period, it is SUFFICIENT. Do not withhold
   this verdict just because you cannot personally re-audit every number.
-- "insufficient": there is a CONCRETE, NAMEABLE gap between what was asked and what was
-  received. You must be able to state the specific missing piece. Valid reasons include:
-  the criteria require ALL accounts/entities/meetings and only some arrived; the wrong
-  entity or period; a threshold not met; an informal artifact where a formal one was
-  explicitly required (e.g. a photo instead of a signed reconciliation).
+- "insufficient": there is a CONCRETE, NAMEABLE piece of the request that was NOT received
+  at all. Reserve this for a genuine MISSING artifact: the criteria require ALL
+  accounts/entities/meetings and only some arrived; the wrong entity or period; a
+  threshold not met; an informal artifact where a formal one was explicitly required
+  (e.g. a photo instead of a signed reconciliation). The gap is that something is absent.
+- "under_review": the requested document arrived and is substantively on-point, but you
+  have a QUALITY/GRANULARITY/FORMAT reservation you cannot fully resolve from the extracted
+  fields alone (e.g. the register summarizes by category and you'd want line-item detail;
+  a forecast is referenced with headline figures but a fuller schedule may exist). The
+  right call here is human review, NOT insufficiency — the substance is present, the
+  question is depth.
 - "not_started": no relevant evidence was received.
 
-Default to "sufficient" when a matching document arrived and you cannot name a specific
-gap. Reserve "insufficient" for a real, articulable shortfall — not general caution.
-
-Judge the document on the substance it actually contains, not on cross-references. If a
-required element is substantively present in the document itself (e.g. a signature is
-there, and the required figures/forecast are stated in the body), treat it as satisfied —
-even if the document also mentions a separate attachment. A mere reference to a missing
-supplementary attachment is not, by itself, grounds for "insufficient" when the required
-substance is already in the received document.
+Decision rule: is something ASKED-FOR actually MISSING? → insufficient. Is the document
+present but its depth/format debatable? → under_review. Present and clearly adequate? →
+sufficient. Judge the document on the substance it contains, not on cross-references to
+separate attachments.
 
 You must call the verification_verdict tool with your decision."""
 
@@ -373,7 +374,7 @@ You must call the verification_verdict tool with your decision."""
                     "item_id": {"type": "string"},
                     "verdict": {
                         "type": "string",
-                        "enum": ["sufficient", "insufficient", "not_started"],
+                        "enum": ["sufficient", "insufficient", "under_review", "not_started"],
                     },
                     "reasoning": {"type": "string"},
                     "missing": {
@@ -405,6 +406,7 @@ You must call the verification_verdict tool with your decision."""
             status_map = {
                 "sufficient": "Received",
                 "insufficient": "Insufficient",
+                "under_review": "Under review",
                 "not_started": "Not started",
             }
             item.status = status_map.get(verdict.verdict, item.status)
