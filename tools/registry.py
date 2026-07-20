@@ -7,7 +7,7 @@ The agent sees these definitions and calls them via native tool-use.
 
 from typing import Any
 
-from tools.parsers import parse_pdf, parse_excel, ocr_image
+from tools.parsers import parse_pdf, parse_excel, ocr_image, parse_zip
 from tools.classification import classify_document
 from tools.extraction import extract_fields
 from tools.tracker_ops import update_item_status, get_item_status
@@ -55,6 +55,20 @@ TOOL_DEFINITIONS = [
                 "filename": {
                     "type": "string",
                     "description": "The filename of the image to OCR"
+                }
+            },
+            "required": ["filename"]
+        }
+    },
+    {
+        "name": "parse_zip",
+        "description": "Inspect a ZIP attachment: list contents and parse inner PDF/Excel/image files. Use for batched submissions (e.g. multiple confirmation letters in one archive).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "The filename of the ZIP attachment to inspect"
                 }
             },
             "required": ["filename"]
@@ -195,6 +209,7 @@ def execute_tool(
         "parse_pdf": parse_pdf,
         "parse_excel": parse_excel,
         "ocr_image": ocr_image,
+        "parse_zip": parse_zip,
         "classify_document": lambda **kwargs: classify_document(run=run, **kwargs),
         "extract_fields": extract_fields,
         "update_item_status": lambda **kwargs: update_item_status(run=run, email=email, **kwargs),
@@ -208,7 +223,7 @@ def execute_tool(
     try:
         result = handler(**tool_input)
         # Cache parse outputs by filename for later citation verification
-        if tool_name in ("parse_pdf", "parse_excel", "ocr_image"):
+        if tool_name in ("parse_pdf", "parse_excel", "ocr_image", "parse_zip"):
             filename = tool_input.get("filename")
             if filename and isinstance(result, dict) and "error" not in result:
                 lock = getattr(run, "lock", None)

@@ -94,6 +94,7 @@ Tools the model calls via native Anthropic tool-use (full schemas in `tools/regi
 - `parse_pdf(filename)` → pages + text
 - `parse_excel(filename, sheet_name?)` → sheets, rows, cell refs
 - `ocr_image(filename)` → OCR text + bounding boxes (graceful fallback if OCR unavailable)
+- `parse_zip(filename)` → lists archive contents and parses inner PDF/Excel/image files (batched submissions)
 - `classify_document(filename, content_summary, document_type)` → candidate PBC items + scores
 - `extract_fields(filename, pbc_item_id, content, fields_to_extract?)` → fields + citations
 - `update_item_status(item_id, status, reasoning, evidence_filename?, citations?, ...)`

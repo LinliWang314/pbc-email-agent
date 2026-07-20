@@ -180,3 +180,58 @@ def ocr_image(filename: str) -> dict[str, Any]:
         return {"error": str(e)}
     except Exception as e:
         return {"error": f"Failed to OCR {filename}: {str(e)}"}
+
+
+def parse_zip(filename: str) -> dict[str, Any]:
+    """
+    Inspect a ZIP attachment: list its contents and parse the inner documents
+    (PDF/Excel/image) so the agent can reason about multi-file submissions such as
+    batched confirmations. Extracts to a temp dir; each inner file is parsed with the
+    matching parser. Fails gracefully per-file so one bad member can't sink the batch.
+    """
+    import tempfile
+    import zipfile
+
+    try:
+        path = _resolve_path(filename)
+    except FileNotFoundError as e:
+        return {"error": str(e)}
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = [n for n in zf.namelist() if not n.endswith("/")]
+            members = []
+            tmpdir = tempfile.mkdtemp(prefix="pbc_zip_")
+            # Point the resolver at the temp dir so inner parsers find the files
+            global ATTACHMENTS_DIR
+            outer_dir = ATTACHMENTS_DIR
+            for name in names[:50]:  # cap member count
+                try:
+                    zf.extract(name, tmpdir)
+                    inner_path = os.path.join(tmpdir, name)
+                    ATTACHMENTS_DIR = os.path.dirname(inner_path)
+                    base = os.path.basename(name)
+                    lower = base.lower()
+                    if lower.endswith(".pdf"):
+                        parsed = parse_pdf(base)
+                    elif lower.endswith((".xlsx", ".xls")):
+                        parsed = parse_excel(base)
+                    elif lower.endswith((".jpg", ".jpeg", ".png")):
+                        parsed = ocr_image(base)
+                    else:
+                        parsed = {"note": "unsupported inner type; listed only"}
+                    members.append({"name": name, "parsed": parsed})
+                except Exception as e:
+                    members.append({"name": name, "error": str(e)})
+            ATTACHMENTS_DIR = outer_dir
+
+            return {
+                "filename": filename,
+                "member_count": len(names),
+                "members": members,
+                "note": f"ZIP with {len(names)} file(s); parsed {len(members)}.",
+            }
+    except zipfile.BadZipFile:
+        return {"error": f"{filename} is not a valid ZIP (possibly corrupt); needs manual review."}
+    except Exception as e:
+        return {"error": f"Failed to parse ZIP {filename}: {str(e)}"}
