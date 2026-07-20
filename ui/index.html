@@ -149,15 +149,35 @@
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({data_dir: dataDir, max_cost_usd: 2.0})
                 });
-                const result = await resp.json();
-                if (!resp.ok) throw new Error(result.detail || 'Run failed');
-                renderBanner(result);
-                await Promise.all([loadTracker(), loadTraces(), loadFollowups(), loadCost()]);
-                btn.textContent = '✓ Complete';
+                const kick = await resp.json();
+                if (!resp.ok) throw new Error(kick.detail || 'Run failed to start');
+                await pollStatus(btn);
             } catch (e) {
-                btn.textContent = '✗ Error'; alert(e.message);
+                btn.textContent = '✗ Error'; btn.disabled = false; alert(e.message);
             }
-            setTimeout(() => { btn.textContent = '▶ Run Agent'; btn.disabled = false; }, 2500);
+        }
+
+        async function pollStatus(btn) {
+            // The run executes in the background; poll until complete or error.
+            for (let i = 0; i < 240; i++) {          // up to ~8 min
+                await new Promise(r => setTimeout(r, 2000));
+                let s;
+                try { s = await (await fetch('/api/status')).json(); } catch { continue; }
+                if (s.state === 'running') { btn.textContent = '⏳ Running…'; continue; }
+                if (s.state === 'error') {
+                    btn.textContent = '✗ Error'; btn.disabled = false;
+                    alert('Run failed: ' + (s.message || 'unknown'));
+                    return;
+                }
+                if (s.state === 'complete') {
+                    renderBanner(s);
+                    await Promise.all([loadTracker(), loadTraces(), loadFollowups(), loadCost()]);
+                    btn.textContent = '✓ Complete';
+                    setTimeout(() => { btn.textContent = '▶ Run Agent'; btn.disabled = false; }, 2500);
+                    return;
+                }
+            }
+            btn.textContent = '▶ Run Agent'; btn.disabled = false;
         }
 
         function renderBanner(result) {

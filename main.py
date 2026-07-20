@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 import shutil
+import threading
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -39,6 +40,9 @@ app = FastAPI(title="PBC Email Agent", version="0.1.0")
 
 # Global state for the current run
 current_run: AgentRun | None = None
+# Run status for the async job: idle | running | complete | error
+run_status: dict = {"state": "idle", "message": "", "started": False}
+_run_lock = threading.Lock()
 
 
 class RunConfig(BaseModel):
@@ -46,77 +50,89 @@ class RunConfig(BaseModel):
     max_cost_usd: float = 2.00
 
 
+def _execute_run(config: RunConfig) -> None:
+    """
+    Heavy agent run — executed in a background thread so the HTTP request returns
+    immediately (the full run takes minutes and would otherwise hit the platform's
+    request timeout). Progress is exposed via /api/status.
+    """
+    global current_run, run_status
+    try:
+        bundled = str(Path(__file__).parent / "sample_data")
+        data_dir = config.data_dir or os.environ.get("PBC_DATA_DIR", "") or bundled
+        if not os.path.isdir(data_dir):
+            raise RuntimeError(f"Data directory not found: {data_dir}")
+
+        pbc_path = os.path.join(data_dir, "PBC_List_FY2026.pdf")
+        if not os.path.exists(pbc_path):
+            for f in os.listdir(data_dir):
+                if f.lower().startswith("pbc") and f.endswith(".pdf"):
+                    pbc_path = os.path.join(data_dir, f)
+                    break
+
+        pbc_items = parse_pbc_list_llm(pbc_path)
+
+        profile_path = os.path.join(data_dir, "Client_Profile.pdf")
+        client_profile = load_client_profile(profile_path) if os.path.exists(profile_path) else {}
+
+        emails_dir = os.path.join(data_dir, "sample", "emails")
+        mbox_path = os.path.join(data_dir, "sample", "sample_mailbox.mbox")
+        if os.path.isdir(emails_dir):
+            emails = load_emails_from_directory(emails_dir)
+        elif os.path.exists(mbox_path):
+            emails = load_emails_from_mbox(mbox_path)
+        else:
+            raise RuntimeError("No emails found (expected sample/emails/ or sample/sample_mailbox.mbox)")
+
+        set_attachments_dir(os.path.join(data_dir, "sample", "attachments"))
+
+        agent_config = AgentConfig(max_cost_usd=config.max_cost_usd)
+        # Allow the platform to cap concurrency (lower memory footprint on small dynos)
+        workers_env = os.environ.get("PBC_MAX_WORKERS")
+        if workers_env:
+            agent_config.max_workers = int(workers_env)
+
+        current_run = run_agent(
+            pbc_items=pbc_items,
+            emails=emails,
+            config=agent_config,
+            client_contacts=client_profile.get("contacts", {}),
+            engagement_info={
+                "entity": client_profile.get("entity_name", ""),
+                "fiscal_year_end": client_profile.get("fiscal_year_end", ""),
+            },
+        )
+        run_status = {
+            "state": "complete",
+            "offline": current_run.offline,
+            "items_processed": len(pbc_items),
+            "emails_processed": len(emails),
+            "cost_usd": current_run.cost.cost_usd,
+            "message": "Offline mode — set ANTHROPIC_API_KEY to classify."
+                       if current_run.offline else "Full agent run complete.",
+        }
+    except Exception as e:
+        import traceback
+        run_status = {"state": "error", "message": f"{type(e).__name__}: {e}",
+                      "trace": traceback.format_exc()[-1500:]}
+
+
 @app.post("/api/run")
 async def start_run(config: RunConfig):
-    """Process a mailbox against the PBC list."""
-    global current_run
+    """Kick off an agent run in the background; returns immediately."""
+    global run_status
+    with _run_lock:
+        if run_status.get("state") == "running":
+            return {"status": "already_running"}
+        run_status = {"state": "running", "message": "Agent run in progress…"}
+    threading.Thread(target=_execute_run, args=(config,), daemon=True).start()
+    return {"status": "started"}
 
-    # Resolve data dir: explicit arg > env var > bundled sample_data/
-    bundled = str(Path(__file__).parent / "sample_data")
-    data_dir = config.data_dir or os.environ.get("PBC_DATA_DIR", "") or bundled
-    if not os.path.isdir(data_dir):
-        raise HTTPException(400, f"Data directory not found: {data_dir}")
 
-    # Load PBC list
-    pbc_path = os.path.join(data_dir, "PBC_List_FY2026.pdf")
-    if not os.path.exists(pbc_path):
-        # Try to find any PBC list PDF
-        for f in os.listdir(data_dir):
-            if f.lower().startswith("pbc") and f.endswith(".pdf"):
-                pbc_path = os.path.join(data_dir, f)
-                break
-
-    # Free-form PBC lists require LLM structuring; falls back to regex if no API key
-    pbc_items = parse_pbc_list_llm(pbc_path)
-
-    # Load client profile
-    profile_path = os.path.join(data_dir, "Client_Profile.pdf")
-    client_profile = {}
-    if os.path.exists(profile_path):
-        client_profile = load_client_profile(profile_path)
-
-    # Load emails
-    emails_dir = os.path.join(data_dir, "sample", "emails")
-    mbox_path = os.path.join(data_dir, "sample", "sample_mailbox.mbox")
-
-    if os.path.isdir(emails_dir):
-        emails = load_emails_from_directory(emails_dir)
-    elif os.path.exists(mbox_path):
-        emails = load_emails_from_mbox(mbox_path)
-    else:
-        raise HTTPException(400, "No emails found. Expected sample/emails/ or sample/sample_mailbox.mbox")
-
-    # Set attachments directory
-    attachments_dir = os.path.join(data_dir, "sample", "attachments")
-    set_attachments_dir(attachments_dir)
-
-    # Configure and run agent
-    agent_config = AgentConfig(max_cost_usd=config.max_cost_usd)
-
-    current_run = run_agent(
-        pbc_items=pbc_items,
-        emails=emails,
-        config=agent_config,
-        client_contacts=client_profile.get("contacts", {}),
-        engagement_info={
-            "entity": client_profile.get("entity_name", ""),
-            "fiscal_year_end": client_profile.get("fiscal_year_end", ""),
-        },
-    )
-
-    return {
-        "status": "complete",
-        "offline": current_run.offline,
-        "note": (
-            "Offline mode: no ANTHROPIC_API_KEY set. Ingested deterministically; "
-            "set the key to run the full agent loop and classify evidence."
-            if current_run.offline else "Full agent run complete."
-        ),
-        "items_processed": len(pbc_items),
-        "emails_processed": len(emails),
-        "cost_usd": current_run.cost.cost_usd,
-        "traces_count": len(current_run.traces),
-    }
+@app.get("/api/status")
+async def get_status():
+    """Poll the status of the current/last run."""
+    return run_status
 
 
 @app.get("/api/tracker")
