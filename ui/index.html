@@ -10,259 +10,280 @@
 
         .header { background: #1a1a2e; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 1.2rem; font-weight: 600; }
-        .header .cost { font-size: 0.9rem; opacity: 0.8; }
+        .header .cost { font-size: 0.9rem; opacity: 0.85; font-variant-numeric: tabular-nums; }
+
+        .banner { padding: 0.6rem 2rem; font-size: 0.85rem; display: none; }
+        .banner.offline { display: block; background: #fef3c7; color: #92400e; border-bottom: 1px solid #fcd34d; }
 
         .nav { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; background: white; padding: 0 2rem; }
-        .nav button { padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .nav button { padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent; margin-bottom: -2px; color: #475569; }
         .nav button.active { border-bottom-color: #2563eb; color: #2563eb; font-weight: 600; }
 
-        .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+        .container { max-width: 1240px; margin: 0 auto; padding: 1.5rem; }
 
-        /* Tracker View */
         .tracker-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .tracker-table th { background: #f8fafc; padding: 0.75rem 1rem; text-align: left; font-size: 0.85rem; text-transform: uppercase; color: #64748b; }
-        .tracker-table td { padding: 0.75rem 1rem; border-top: 1px solid #f1f5f9; font-size: 0.9rem; }
-        .tracker-table tr:hover { background: #f8fafc; cursor: pointer; }
+        .tracker-table th { background: #f8fafc; padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.03em; }
+        .tracker-table td { padding: 0.75rem 1rem; border-top: 1px solid #f1f5f9; font-size: 0.9rem; vertical-align: top; }
+        .tracker-table tr.item-row:hover { background: #f0f7ff; cursor: pointer; }
 
-        .status-badge { padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 500; }
+        .status-badge { padding: 0.25rem 0.7rem; border-radius: 12px; font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
         .status-not-started { background: #f1f5f9; color: #64748b; }
         .status-received { background: #dcfce7; color: #166534; }
         .status-insufficient { background: #fef3c7; color: #92400e; }
         .status-under-review { background: #dbeafe; color: #1e40af; }
         .status-complete { background: #d1fae5; color: #065f46; }
 
-        /* Trace View */
-        .trace-panel { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
-        .trace-step { border-left: 3px solid #e0e0e0; padding: 0.75rem 1rem; margin: 0.5rem 0; }
+        .conf-bar { display: inline-block; width: 46px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; vertical-align: middle; }
+        .conf-fill { height: 100%; background: #22c55e; }
+        .conf-fill.low { background: #f59e0b; }
+
+        .cat-pill { font-size: 0.72rem; color: #64748b; }
+        .view-hint { color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; }
+
+        /* Trace view */
+        .trace-panel { background: white; border-radius: 8px; padding: 1.25rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .trace-panel h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+        .trace-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 0.75rem; }
+        .trace-step { border-left: 3px solid #e0e0e0; padding: 0.5rem 0.9rem; margin: 0.5rem 0; background: #fafbfc; border-radius: 0 4px 4px 0; }
         .trace-step.plan { border-left-color: #2563eb; }
         .trace-step.extraction { border-left-color: #7c3aed; }
         .trace-step.verification { border-left-color: #059669; }
         .trace-step.followup { border-left-color: #d97706; }
-        .trace-phase { font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: #64748b; }
-        .trace-decision { font-weight: 500; margin: 0.25rem 0; }
-        .trace-reasoning { font-size: 0.85rem; color: #475569; }
-        .tool-call { background: #f8fafc; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; font-family: monospace; font-size: 0.8rem; }
+        .trace-phase { font-size: 0.68rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+        .trace-step.plan .trace-phase { color: #2563eb; }
+        .trace-step.extraction .trace-phase { color: #7c3aed; }
+        .trace-step.verification .trace-phase { color: #059669; }
+        .trace-step.followup .trace-phase { color: #d97706; }
+        .trace-decision { font-weight: 600; margin: 0.15rem 0; font-size: 0.88rem; }
+        .trace-reasoning { font-size: 0.85rem; color: #475569; line-height: 1.5; }
+        .tool-call { background: #1e293b; color: #e2e8f0; padding: 0.5rem 0.7rem; border-radius: 4px; margin-top: 0.4rem; font-family: 'SF Mono', Menlo, monospace; font-size: 0.78rem; overflow-x: auto; }
+        .tool-call .tname { color: #7dd3fc; font-weight: 600; }
 
-        /* Follow-up View */
+        .verdict { padding: 0.6rem 0.9rem; border-radius: 6px; margin-top: 0.5rem; font-size: 0.85rem; }
+        .verdict-sufficient { background: #f0fdf4; border: 1px solid #86efac; }
+        .verdict-insufficient { background: #fffbeb; border: 1px solid #fcd34d; }
+        .verdict-not_started { background: #f8fafc; border: 1px solid #e2e8f0; }
+        .verdict-title { font-weight: 700; }
+        .citation { display: inline-block; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.75rem; margin: 0.15rem 0.25rem 0 0; font-family: monospace; }
+        .citation.unverified { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+
         .followup-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
-        .followup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        .followup-body { background: #f8fafc; padding: 1rem; border-radius: 4px; white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; }
+        .followup-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 1rem; }
+        .followup-body { background: #f8fafc; padding: 1rem; border-radius: 4px; white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; border: 1px solid #eef2f7; }
         .followup-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
-        .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
         .btn-approve { background: #059669; color: white; }
         .btn-reject { background: #dc2626; color: white; }
-        .btn-edit { background: #2563eb; color: white; }
-        .btn-run { background: #2563eb; color: white; padding: 0.75rem 1.5rem; font-size: 1rem; }
-
-        .verdict { padding: 0.5rem 1rem; border-radius: 6px; margin-top: 0.5rem; }
-        .verdict-sufficient { background: #dcfce7; border: 1px solid #86efac; }
-        .verdict-insufficient { background: #fef3c7; border: 1px solid #fcd34d; }
+        .btn-run { background: #2563eb; color: white; padding: 0.6rem 1.4rem; font-size: 0.95rem; }
+        .btn:disabled { opacity: 0.6; cursor: default; }
 
         .hidden { display: none; }
         .loading { text-align: center; padding: 3rem; color: #64748b; }
-
-        .run-controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
-        .run-controls input { padding: 0.5rem; border: 1px solid #e0e0e0; border-radius: 4px; flex: 1; }
+        .run-controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.25rem; }
+        .run-controls input { padding: 0.5rem 0.75rem; border: 1px solid #e0e0e0; border-radius: 6px; flex: 1; font-size: 0.9rem; }
+        .summary-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .chip { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.4rem 0.8rem; font-size: 0.82rem; }
+        .chip b { font-variant-numeric: tabular-nums; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>PBC Email Agent — Audit Request Tracker</h1>
-        <div class="cost" id="cost-display">Cost: $0.00 / $2.00</div>
+        <div class="cost" id="cost-display">Cost: —</div>
     </div>
+    <div class="banner" id="offline-banner"></div>
 
     <div class="nav">
-        <button class="active" onclick="showView('tracker')">Tracker</button>
-        <button onclick="showView('traces')">Agent Traces</button>
-        <button onclick="showView('followups')">Follow-ups</button>
+        <button class="active" data-view="tracker" onclick="showView('tracker', this)">Tracker</button>
+        <button data-view="traces" onclick="showView('traces', this)">Agent Traces</button>
+        <button data-view="followups" onclick="showView('followups', this)">Follow-ups</button>
     </div>
 
     <div class="container">
-        <!-- Run Controls -->
-        <div class="run-controls" id="run-controls">
-            <input type="text" id="data-dir" placeholder="Data directory path (or set PBC_DATA_DIR env var)">
+        <div class="run-controls">
+            <input type="text" id="data-dir" placeholder="Data directory (blank = bundled sample)">
             <button class="btn btn-run" onclick="startRun()">▶ Run Agent</button>
         </div>
+        <div class="summary-chips" id="summary-chips"></div>
 
-        <!-- Tracker View -->
         <div id="view-tracker">
             <table class="tracker-table">
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>Category</th>
-                        <th>Description</th>
-                        <th>Status</th>
-                        <th>Evidence</th>
-                        <th>Confidence</th>
-                    </tr>
-                </thead>
+                <thead><tr>
+                    <th>Item</th><th>Category</th><th>Description</th>
+                    <th>Status</th><th>Latest evidence</th><th>Conf.</th>
+                </tr></thead>
                 <tbody id="tracker-body">
-                    <tr><td colspan="6" class="loading">Run the agent to see results</td></tr>
+                    <tr><td colspan="6" class="loading">Click “Run Agent” to process the mailbox.</td></tr>
                 </tbody>
             </table>
         </div>
 
-        <!-- Traces View -->
         <div id="view-traces" class="hidden">
-            <div id="traces-container">
-                <p class="loading">Run the agent to see traces</p>
-            </div>
+            <div class="view-hint">Every status decision below shows the full agent trace: plan → tool calls → verifier verdict. Click an item in the Tracker to jump to its trace.</div>
+            <div id="traces-container"><p class="loading">Run the agent to see traces.</p></div>
         </div>
 
-        <!-- Follow-ups View -->
         <div id="view-followups" class="hidden">
-            <div id="followups-container">
-                <p class="loading">Run the agent to see follow-up drafts</p>
-            </div>
+            <div class="view-hint">One grouped draft per recipient. “Send” is mocked — approve/reject to simulate.</div>
+            <div id="followups-container"><p class="loading">Run the agent to see follow-up drafts.</p></div>
         </div>
     </div>
 
     <script>
-        let currentView = 'tracker';
+        let TRACES = [];
 
-        function showView(view) {
+        function showView(view, btn) {
             document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
-
-            document.getElementById('view-tracker').classList.toggle('hidden', view !== 'tracker');
-            document.getElementById('view-traces').classList.toggle('hidden', view !== 'traces');
-            document.getElementById('view-followups').classList.toggle('hidden', view !== 'followups');
-            currentView = view;
+            if (btn) btn.classList.add('active');
+            else document.querySelector(`.nav button[data-view="${view}"]`).classList.add('active');
+            ['tracker','traces','followups'].forEach(v =>
+                document.getElementById('view-'+v).classList.toggle('hidden', v !== view));
         }
 
         async function startRun() {
             const dataDir = document.getElementById('data-dir').value;
             const btn = document.querySelector('.btn-run');
-            btn.textContent = '⏳ Running...';
-            btn.disabled = true;
-
+            btn.textContent = '⏳ Running…'; btn.disabled = true;
             try {
                 const resp = await fetch('/api/run', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({data_dir: dataDir, max_cost_usd: 2.0})
                 });
                 const result = await resp.json();
-
-                if (resp.ok) {
-                    btn.textContent = '✓ Complete';
-                    await loadTracker();
-                    await loadTraces();
-                    await loadFollowups();
-                    await loadCost();
-                } else {
-                    btn.textContent = '✗ Error';
-                    alert(result.detail || 'Run failed');
-                }
+                if (!resp.ok) throw new Error(result.detail || 'Run failed');
+                renderBanner(result);
+                await Promise.all([loadTracker(), loadTraces(), loadFollowups(), loadCost()]);
+                btn.textContent = '✓ Complete';
             } catch (e) {
-                btn.textContent = '✗ Error';
-                alert('Network error: ' + e.message);
+                btn.textContent = '✗ Error'; alert(e.message);
             }
+            setTimeout(() => { btn.textContent = '▶ Run Agent'; btn.disabled = false; }, 2500);
+        }
 
-            setTimeout(() => { btn.textContent = '▶ Run Agent'; btn.disabled = false; }, 3000);
+        function renderBanner(result) {
+            const b = document.getElementById('offline-banner');
+            if (result.offline) {
+                b.className = 'banner offline';
+                b.textContent = '⚠ Offline mode — no ANTHROPIC_API_KEY set. Ingestion and UI are fully functional; set the key to run the full plan → act → verify loop and classify evidence.';
+            } else {
+                b.className = 'banner';
+            }
         }
 
         async function loadTracker() {
-            const resp = await fetch('/api/tracker');
-            const data = await resp.json();
-            const tbody = document.getElementById('tracker-body');
+            const data = await (await fetch('/api/tracker')).json();
+            const items = Object.values(data.items);
+            document.getElementById('tracker-body').innerHTML = items.map(item => {
+                const ev = item.evidence[0];
+                const conf = ev ? Math.round(ev.confidence * 100) : null;
+                const confHtml = conf === null ? '—' :
+                    `<span class="conf-bar"><span class="conf-fill ${conf<70?'low':''}" style="width:${conf}%"></span></span> ${conf}%`;
+                return `<tr class="item-row" onclick="openTrace('${item.id}')">
+                    <td><b>${item.id}</b></td>
+                    <td><span class="cat-pill">${item.category}</span></td>
+                    <td>${item.description.substring(0,90)}${item.description.length>90?'…':''}</td>
+                    <td><span class="status-badge status-${item.status.toLowerCase().replace(/ /g,'-')}">${item.status}</span></td>
+                    <td>${item.evidence.map(e=>e.filename).join('<br>') || '—'}</td>
+                    <td style="white-space:nowrap">${confHtml}</td>
+                </tr>`;
+            }).join('');
 
-            tbody.innerHTML = Object.values(data.items).map(item => `
-                <tr onclick="showItemTrace('${item.id}')">
-                    <td><strong>${item.id}</strong></td>
-                    <td>${item.category}</td>
-                    <td>${item.description.substring(0, 80)}...</td>
-                    <td><span class="status-badge status-${item.status.toLowerCase().replace(/ /g, '-')}">${item.status}</span></td>
-                    <td>${item.evidence.map(e => e.filename).join(', ') || '—'}</td>
-                    <td>${item.evidence.length > 0 ? (item.evidence[0].confidence * 100).toFixed(0) + '%' : '—'}</td>
-                </tr>
-            `).join('');
+            // Status summary chips
+            const counts = {};
+            items.forEach(i => counts[i.status] = (counts[i.status]||0)+1);
+            document.getElementById('summary-chips').innerHTML =
+                Object.entries(counts).map(([s,c]) =>
+                    `<span class="chip"><span class="status-badge status-${s.toLowerCase().replace(/ /g,'-')}">${s}</span> <b>${c}</b></span>`
+                ).join('');
         }
 
         async function loadTraces() {
-            const resp = await fetch('/api/traces');
-            const traces = await resp.json();
-            const container = document.getElementById('traces-container');
+            TRACES = await (await fetch('/api/traces')).json();
+            renderTraces(TRACES);
+        }
 
+        function renderTraces(traces) {
+            const container = document.getElementById('traces-container');
             container.innerHTML = traces.map(trace => `
-                <div class="trace-panel">
-                    <h3>${trace.subject || trace.email_id}</h3>
-                    <p style="font-size:0.85rem;color:#64748b;margin:0.5rem 0;">
-                        Affected items: ${trace.affected_items.join(', ') || 'none'}
-                    </p>
-                    ${trace.steps.map(step => `
-                        <div class="trace-step ${step.phase}">
-                            <div class="trace-phase">${step.phase}</div>
-                            <div class="trace-decision">${step.decision}</div>
-                            <div class="trace-reasoning">${step.reasoning}</div>
-                            ${step.tool_call ? `<div class="tool-call">🔧 ${step.tool_call.tool_name}(${JSON.stringify(step.tool_call.tool_input).substring(0, 100)}...)</div>` : ''}
-                        </div>
-                    `).join('')}
-                    ${trace.verifier_verdicts.map(v => `
-                        <div class="verdict verdict-${v.verdict}">
-                            <strong>Verifier [${v.item_id}]:</strong> ${v.verdict}<br>
-                            <span style="font-size:0.85rem">${v.reasoning}</span>
-                            ${v.missing.length ? `<br><em>Missing: ${v.missing.join(', ')}</em>` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            `).join('');
+                <div class="trace-panel" id="trace-${cssId(trace.email_id)}">
+                    <h3>${escapeHtml(trace.subject || trace.email_id)}</h3>
+                    <div class="trace-meta">Affected items: ${trace.affected_items.join(', ') || 'none'}</div>
+                    ${trace.steps.map(renderStep).join('')}
+                    ${trace.verifier_verdicts.map(renderVerdict).join('')}
+                </div>`).join('') || '<p class="loading">No traces.</p>';
+        }
+
+        function renderStep(step) {
+            let toolHtml = '';
+            if (step.tool_call) {
+                const ci = step.tool_call.tool_input || {};
+                const cites = (ci.citations || []).map(c =>
+                    `<span class="citation">${c.type}:${escapeHtml(String(c.reference||''))}</span>`).join('');
+                toolHtml = `<div class="tool-call"><span class="tname">${step.tool_call.tool_name}</span>(${escapeHtml(shortJson(ci))})</div>${cites}`;
+            }
+            return `<div class="trace-step ${step.phase}">
+                <div class="trace-phase">${step.phase}</div>
+                <div class="trace-decision">${escapeHtml(step.decision)}</div>
+                <div class="trace-reasoning">${escapeHtml(step.reasoning || '')}</div>
+                ${toolHtml}
+            </div>`;
+        }
+
+        function renderVerdict(v) {
+            return `<div class="verdict verdict-${v.verdict}">
+                <span class="verdict-title">Verifier · ${v.item_id}: ${v.verdict.toUpperCase()}</span><br>
+                ${escapeHtml(v.reasoning)}
+                ${v.missing && v.missing.length ? `<br><em>Missing: ${v.missing.map(escapeHtml).join(', ')}</em>` : ''}
+            </div>`;
         }
 
         async function loadFollowups() {
-            const resp = await fetch('/api/followups');
-            const followups = await resp.json();
+            const followups = await (await fetch('/api/followups')).json();
             const container = document.getElementById('followups-container');
-
-            if (followups.length === 0) {
-                container.innerHTML = '<p class="loading">No follow-ups needed</p>';
-                return;
-            }
-
+            if (!followups.length) { container.innerHTML = '<p class="loading">No follow-ups needed.</p>'; return; }
             container.innerHTML = followups.map((fu, idx) => `
                 <div class="followup-card">
                     <div class="followup-header">
                         <div>
-                            <strong>To:</strong> ${fu.recipient_name} &lt;${fu.recipient_email}&gt;<br>
-                            <strong>Subject:</strong> ${fu.subject}<br>
-                            <strong>Items:</strong> ${(fu.items_covered || []).join(', ')}
+                            <b>To:</b> ${escapeHtml(fu.recipient_name)} &lt;${escapeHtml(fu.recipient_email)}&gt;<br>
+                            <b>Subject:</b> ${escapeHtml(fu.subject)}<br>
+                            <b>Items:</b> ${(fu.items_covered||[]).join(', ')}
                         </div>
-                        <span class="status-badge ${fu.approved ? 'status-complete' : fu.rejected ? 'status-insufficient' : 'status-under-review'}">
-                            ${fu.approved ? 'Approved' : fu.rejected ? 'Rejected' : 'Pending'}
-                        </span>
+                        <span class="status-badge ${fu.approved?'status-complete':fu.rejected?'status-insufficient':'status-under-review'}">
+                            ${fu.approved?'Approved':fu.rejected?'Rejected':'Pending'}</span>
                     </div>
-                    <div class="followup-body">${fu.body}</div>
+                    <div class="followup-body">${escapeHtml(fu.body)}</div>
                     <div class="followup-actions">
-                        <button class="btn btn-approve" onclick="approveFollowup(${idx})">✓ Approve & Send</button>
-                        <button class="btn btn-reject" onclick="rejectFollowup(${idx})">✗ Reject</button>
+                        <button class="btn btn-approve" onclick="actFollowup(${idx},'approve')">✓ Approve &amp; Send</button>
+                        <button class="btn btn-reject" onclick="actFollowup(${idx},'reject')">✗ Reject</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`).join('');
         }
 
         async function loadCost() {
-            const resp = await fetch('/api/cost');
-            const cost = await resp.json();
+            const cost = await (await fetch('/api/cost')).json();
             document.getElementById('cost-display').textContent =
-                `Cost: $${cost.total_cost_usd.toFixed(2)} / $2.00 | Tokens: ${cost.input_tokens + cost.output_tokens}`;
+                `Cost: $${cost.total_cost_usd.toFixed(4)} / $2.00  ·  ${(cost.input_tokens+cost.output_tokens).toLocaleString()} tokens`;
         }
 
-        async function approveFollowup(idx) {
-            await fetch(`/api/followups/${idx}/approve`, {method: 'POST'});
+        async function actFollowup(idx, action) {
+            await fetch(`/api/followups/${idx}/${action}`, {method:'POST'});
             await loadFollowups();
         }
 
-        async function rejectFollowup(idx) {
-            await fetch(`/api/followups/${idx}/reject`, {method: 'POST'});
-            await loadFollowups();
-        }
-
-        function showItemTrace(itemId) {
+        function openTrace(itemId) {
             showView('traces');
-            document.querySelectorAll('.nav button')[1].classList.add('active');
-            document.querySelectorAll('.nav button')[0].classList.remove('active');
+            const match = TRACES.find(t => t.affected_items.includes(itemId));
+            if (match) {
+                const el = document.getElementById('trace-'+cssId(match.email_id));
+                if (el) { el.scrollIntoView({behavior:'smooth', block:'start'}); el.style.outline='2px solid #2563eb'; setTimeout(()=>el.style.outline='',1500); }
+            }
         }
+
+        // helpers
+        function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+        function shortJson(o){const s=JSON.stringify(o);return s.length>160?s.slice(0,160)+'…':s;}
+        function cssId(s){return String(s).replace(/[^a-zA-Z0-9]/g,'_');}
     </script>
 </body>
 </html>
