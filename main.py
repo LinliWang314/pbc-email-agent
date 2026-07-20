@@ -150,10 +150,15 @@ async def diagnostics():
 
     result = {}
 
-    # 1. Is the key present (and what shape)?
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
-    result["api_key_present"] = bool(key)
+    # 1. Is the key present (and what shape)? Never echo the key itself.
+    raw_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    key = "".join(raw_key.split())  # sanitized copy used for the diag call below
+    result["api_key_present"] = bool(raw_key)
     result["api_key_prefix"] = (key[:7] + "…") if key else None
+    result["api_key_had_whitespace"] = raw_key != key  # flags the mangled-paste case
+
+    def _redact(msg: str) -> str:
+        return msg.replace(raw_key, "<KEY>").replace(key, "<KEY>") if raw_key else msg
 
     host = "api.anthropic.com"
 
@@ -186,8 +191,8 @@ async def diagnostics():
                                "seconds": round(time.time() - t0, 2)}
     except Exception as e:
         import traceback
-        result["httpx_get"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}",
-                               "cause": str(getattr(e, "__cause__", ""))[:200]}
+        result["httpx_get"] = {"ok": False, "error": _redact(f"{type(e).__name__}: {str(e)[:200]}"),
+                               "cause": _redact(str(getattr(e, "__cause__", ""))[:200])}
 
     # 4b. httpx GET forced to IPv4 transport
     try:
@@ -200,8 +205,8 @@ async def diagnostics():
         result["httpx_ipv4"] = {"ok": True, "status": r.status_code,
                                 "seconds": round(time.time() - t0, 2)}
     except Exception as e:
-        result["httpx_ipv4"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}",
-                                "cause": str(getattr(e, "__cause__", ""))[:200]}
+        result["httpx_ipv4"] = {"ok": False, "error": _redact(f"{type(e).__name__}: {str(e)[:200]}"),
+                                "cause": _redact(str(getattr(e, "__cause__", ""))[:200])}
 
     # 5. Minimal live API call via the SDK
     try:
@@ -216,8 +221,8 @@ async def diagnostics():
         result["api_call"] = {"ok": True, "seconds": round(time.time() - t0, 2),
                               "text": resp.content[0].text if resp.content else ""}
     except Exception as e:
-        result["api_call"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}",
-                              "cause": str(getattr(e, "__cause__", ""))[:200]}
+        result["api_call"] = {"ok": False, "error": _redact(f"{type(e).__name__}: {str(e)[:200]}"),
+                              "cause": _redact(str(getattr(e, "__cause__", ""))[:200])}
 
     return result
 

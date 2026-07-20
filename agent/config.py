@@ -19,7 +19,14 @@ def make_client():
     """
     from anthropic import Anthropic
 
+    # Sanitize the key: dashboards/paste often inject stray whitespace or line breaks,
+    # which makes it an illegal HTTP header value and surfaces as a confusing
+    # APIConnectionError. Strip all internal whitespace defensively.
+    raw_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    clean_key = "".join(raw_key.split())
+
     kwargs = dict(
+        api_key=clean_key or None,
         max_retries=int(os.environ.get("ANTHROPIC_MAX_RETRIES", "5")),
         timeout=float(os.environ.get("ANTHROPIC_TIMEOUT", "60")),
     )
