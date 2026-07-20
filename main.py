@@ -176,7 +176,34 @@ async def diagnostics():
     except Exception as e:
         result["tls_connect"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
-    # 4. Minimal live API call
+    # 4a. Raw httpx GET to the API host (bypasses the SDK) — surfaces the true error.
+    try:
+        import httpx
+        t0 = time.time()
+        r = httpx.get(f"https://{host}/v1/models", timeout=10,
+                      headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
+        result["httpx_get"] = {"ok": True, "status": r.status_code,
+                               "seconds": round(time.time() - t0, 2)}
+    except Exception as e:
+        import traceback
+        result["httpx_get"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}",
+                               "cause": str(getattr(e, "__cause__", ""))[:200]}
+
+    # 4b. httpx GET forced to IPv4 transport
+    try:
+        import httpx
+        tr = httpx.HTTPTransport(local_address="0.0.0.0")
+        with httpx.Client(transport=tr, timeout=10) as c:
+            t0 = time.time()
+            r = c.get(f"https://{host}/v1/models",
+                      headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
+        result["httpx_ipv4"] = {"ok": True, "status": r.status_code,
+                                "seconds": round(time.time() - t0, 2)}
+    except Exception as e:
+        result["httpx_ipv4"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}",
+                                "cause": str(getattr(e, "__cause__", ""))[:200]}
+
+    # 5. Minimal live API call via the SDK
     try:
         from agent.config import make_client
         client = make_client()
@@ -189,7 +216,8 @@ async def diagnostics():
         result["api_call"] = {"ok": True, "seconds": round(time.time() - t0, 2),
                               "text": resp.content[0].text if resp.content else ""}
     except Exception as e:
-        result["api_call"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+        result["api_call"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}",
+                              "cause": str(getattr(e, "__cause__", ""))[:200]}
 
     return result
 
