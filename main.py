@@ -136,6 +136,64 @@ async def get_status():
     return run_status
 
 
+@app.get("/api/diag")
+async def diagnostics():
+    """
+    Connectivity diagnostics — used to isolate why API calls fail in a given
+    hosting environment. Checks: API key presence, DNS resolution of the Anthropic
+    host, a raw HTTPS socket connect, and a minimal live API call. Never returns
+    the key itself.
+    """
+    import socket
+    import ssl
+    import time
+
+    result = {}
+
+    # 1. Is the key present (and what shape)?
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    result["api_key_present"] = bool(key)
+    result["api_key_prefix"] = (key[:7] + "…") if key else None
+
+    host = "api.anthropic.com"
+
+    # 2. DNS resolution
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        addrs = sorted({i[4][0] for i in infos})
+        result["dns"] = {"ok": True, "addresses": addrs}
+    except Exception as e:
+        result["dns"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    # 3. Raw TLS socket connect
+    try:
+        ctx = ssl.create_default_context()
+        t0 = time.time()
+        with socket.create_connection((host, 443), timeout=10) as sock:
+            with ctx.wrap_socket(sock, server_hostname=host):
+                pass
+        result["tls_connect"] = {"ok": True, "seconds": round(time.time() - t0, 2)}
+    except Exception as e:
+        result["tls_connect"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    # 4. Minimal live API call
+    try:
+        from agent.config import make_client
+        client = make_client()
+        t0 = time.time()
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=5,
+            messages=[{"role": "user", "content": "ok"}],
+        )
+        result["api_call"] = {"ok": True, "seconds": round(time.time() - t0, 2),
+                              "text": resp.content[0].text if resp.content else ""}
+    except Exception as e:
+        result["api_call"] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+    return result
+
+
 @app.get("/api/tracker")
 async def get_tracker():
     """Get the current tracker state."""
