@@ -149,8 +149,8 @@ def parse_pbc_list_llm(
         from agent.ingest import _parse_pbc_text
         return _parse_pbc_text(text)
 
-    from anthropic import Anthropic
-    client = Anthropic()
+    from agent.config import make_client
+    client = make_client()
 
     response = client.messages.create(
         model=model,

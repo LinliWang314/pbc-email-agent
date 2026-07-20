@@ -2,7 +2,23 @@
 Agent configuration — model routing and cost control.
 """
 
+import os
 from dataclasses import dataclass
+
+
+def make_client():
+    """
+    Build an Anthropic client with generous retries + timeout.
+
+    Some hosting environments have flaky or rate-limited egress to the API; the SDK's
+    built-in retry with backoff smooths over transient APIConnectionError blips instead
+    of failing the whole run on the first hiccup.
+    """
+    from anthropic import Anthropic
+    return Anthropic(
+        max_retries=int(os.environ.get("ANTHROPIC_MAX_RETRIES", "5")),
+        timeout=float(os.environ.get("ANTHROPIC_TIMEOUT", "60")),
+    )
 
 
 @dataclass

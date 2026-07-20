@@ -115,7 +115,8 @@ def run_agent(
         run.traces.append(trace)
         return run
 
-    client = Anthropic()
+    from agent.config import make_client
+    client = make_client()
 
     # Phase 1: Process emails concurrently. Emails are independent units of work and
     # the slow part is LLM network I/O, so a thread pool cuts wall-clock time roughly

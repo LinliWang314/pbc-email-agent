@@ -113,8 +113,9 @@ def _execute_run(config: RunConfig) -> None:
         }
     except Exception as e:
         import traceback
-        run_status = {"state": "error", "message": f"{type(e).__name__}: {e}",
-                      "trace": traceback.format_exc()[-1500:]}
+        # Log the full trace server-side; do not return it (it can contain secrets).
+        print("RUN ERROR:\n" + traceback.format_exc(), flush=True)
+        run_status = {"state": "error", "message": f"{type(e).__name__}: {e}"}
 
 
 @app.post("/api/run")
