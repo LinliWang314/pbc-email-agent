@@ -2,8 +2,9 @@
 Tests for document version detection logic.
 """
 
+import os
 import sys
-sys.path.insert(0, '/local/home/linliw/pbc-agent/project')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.tracker_ops import _is_same_document
 

@@ -7,13 +7,16 @@ import sys
 import tempfile
 import zipfile
 
-sys.path.insert(0, '/local/home/linliw/pbc-agent/project')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.parsers import set_attachments_dir, parse_zip
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ATTACHMENTS = os.path.join(PROJECT_ROOT, "sample_data", "sample", "attachments")
+
 
 def test_parse_real_sample_zip():
-    set_attachments_dir('/local/home/linliw/pbc-agent/project/sample_data/sample/attachments')
+    set_attachments_dir(ATTACHMENTS)
     r = parse_zip('Customer_Confirmations_Batch1.zip')
     assert r.get("member_count") == 3
     assert len(r.get("members", [])) == 3
@@ -22,7 +25,7 @@ def test_parse_real_sample_zip():
 
 
 def test_missing_zip_graceful():
-    set_attachments_dir('/local/home/linliw/pbc-agent/project/sample_data/sample/attachments')
+    set_attachments_dir(ATTACHMENTS)
     r = parse_zip('does_not_exist.zip')
     assert "error" in r
 

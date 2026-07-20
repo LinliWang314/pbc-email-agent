@@ -5,8 +5,9 @@ These prove that fabricated citations (values not actually in the document) are
 caught deterministically, while genuine citations pass.
 """
 
+import os
 import sys
-sys.path.insert(0, '/local/home/linliw/pbc-agent/project')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.citation_verify import verify_citation, verify_extraction, normalize
 

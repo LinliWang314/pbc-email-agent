@@ -1,0 +1,5 @@
+# Optional OCR support. Requires the `tesseract` system binary as well
+# (e.g. `brew install tesseract` / `apt-get install tesseract-ocr`).
+# Without these, ocr_image degrades gracefully to a manual-review result.
+Pillow>=10.0.0
+pytesseract>=0.3.10

@@ -12,9 +12,11 @@ reasoning trace behind every status decision, defensible to a PCAOB inspector.
 git clone https://github.com/LinliWang314/pbc-email-agent.git
 cd pbc-email-agent
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt            # core deps only — all prebuilt wheels
+# optional: pip install -r requirements-ocr.txt   # image OCR (needs tesseract binary)
 
 export ANTHROPIC_API_KEY=sk-ant-...        # required for a real run
+# PBC_DATA_DIR is optional — defaults to the bundled sample_data/
 export PBC_DATA_DIR=/path/to/data          # dir with PBC_List PDF + sample/ mailbox
 
 python main.py                             # serves UI at http://localhost:8000
@@ -22,7 +24,9 @@ python main.py                             # serves UI at http://localhost:8000
 
 Then open `http://localhost:8000`, click **Run Agent**, and inspect the Tracker,
 Agent Traces, and Follow-ups tabs. Without an API key the app still boots and parses
-deterministically (mock/offline mode) but does not classify.
+deterministically (mock/offline mode) but does not classify. OCR is optional — without
+the OCR extras the `ocr_image` tool degrades to a "needs manual review" result rather
+than failing.
 
 Run the deterministic test suite (no API key, no cost):
 

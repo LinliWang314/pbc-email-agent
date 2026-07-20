@@ -2,8 +2,9 @@
 Tests for email parsing and PBC list ingestion.
 """
 
+import os
 import sys
-sys.path.insert(0, '/local/home/linliw/pbc-agent/project')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.ingest import _parse_pbc_text_simple, _compute_thread_id
 
