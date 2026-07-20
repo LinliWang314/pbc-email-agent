@@ -166,6 +166,7 @@ class TrackerState:
     followup_drafts: list[dict[str, Any]] = field(default_factory=list)
     client_contacts: dict[str, str] = field(default_factory=dict)
     engagement_info: dict[str, str] = field(default_factory=dict)
+    contact_directory: list[dict[str, str]] = field(default_factory=list)
 
     def dict(self) -> dict:
         return {

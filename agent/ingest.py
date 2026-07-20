@@ -216,6 +216,40 @@ def _finalize_item(item_data: dict, text_lines: list[str]) -> PBCItem:
     )
 
 
+def build_contact_directory(
+    emails: list[EmailMessage],
+    profile_contacts: dict[str, str] | None = None,
+) -> list[dict[str, str]]:
+    """
+    Build a name -> real email directory from actual mailbox addresses.
+
+    The client profile lists contact NAMES but not addresses, so drafting must use
+    the real addresses observed in the mailbox rather than guessing a domain. We only
+    include client-side contacts, and tag each with their role from the profile when
+    it can be matched by name.
+    """
+    profile_contacts = profile_contacts or {}
+    # name (lowercased) -> role
+    name_to_role = {v.lower(): k for k, v in profile_contacts.items()}
+
+    seen: dict[str, dict[str, str]] = {}
+    for e in emails:
+        # Parse "Name <addr>" from the From header
+        m = re.match(r"\s*(.*?)\s*<([^>]+)>", e.sender or "")
+        if not m:
+            continue
+        name, addr = m.group(1).strip(), m.group(2).strip().lower()
+        if addr in seen:
+            continue
+        role = name_to_role.get(name.lower(), "")
+        seen[addr] = {"name": name, "email": addr, "role": role}
+
+    # Keep only client-side contacts (those matched to a profile role), if any matched;
+    # otherwise return everyone (defensive — unknown engagements).
+    client_side = [c for c in seen.values() if c["role"]]
+    return client_side if client_side else list(seen.values())
+
+
 def load_client_profile(pdf_path: str) -> dict[str, Any]:
     """Parse client profile PDF into structured data."""
     try:

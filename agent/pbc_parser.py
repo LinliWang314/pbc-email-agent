@@ -155,6 +155,7 @@ def parse_pbc_list_llm(
     response = client.messages.create(
         model=model,
         max_tokens=8192,
+        temperature=0,
         system=PBC_STRUCTURING_PROMPT,
         messages=[{"role": "user", "content": f"PBC list text:\n\n{text}"}],
         tools=[EMIT_TOOL],

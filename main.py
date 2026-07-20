@@ -97,14 +97,12 @@ async def start_run(config: RunConfig):
         pbc_items=pbc_items,
         emails=emails,
         config=agent_config,
+        client_contacts=client_profile.get("contacts", {}),
+        engagement_info={
+            "entity": client_profile.get("entity_name", ""),
+            "fiscal_year_end": client_profile.get("fiscal_year_end", ""),
+        },
     )
-
-    # Inject client profile info
-    current_run.tracker.client_contacts = client_profile.get("contacts", {})
-    current_run.tracker.engagement_info = {
-        "entity": client_profile.get("entity_name", ""),
-        "fiscal_year_end": client_profile.get("fiscal_year_end", ""),
-    }
 
     return {
         "status": "complete",

@@ -14,7 +14,7 @@ Architecture:
 
 Model routing for cost control:
   - claude-haiku-4-5-20251001: classification, routing, simple decisions
-  - claude-sonnet-4-20250514: extraction with citations, verification, drafting
+  - claude-sonnet-4-5-20250929: extraction with citations, verification, drafting
 """
 
 import json
@@ -38,6 +38,13 @@ class CostTracker:
     """Tracks API costs across the run."""
     input_tokens: int = 0
     output_tokens: int = 0
+    _lock: Any = field(default_factory=__import__("threading").Lock)
+
+    def add(self, usage: Any) -> None:
+        """Thread-safe accumulation of token usage from a response."""
+        with self._lock:
+            self.input_tokens += usage.input_tokens
+            self.output_tokens += usage.output_tokens
 
     @property
     def cost_usd(self) -> float:
@@ -59,12 +66,15 @@ class AgentRun:
     cost: CostTracker = field(default_factory=CostTracker)
     config: AgentConfig = field(default_factory=AgentConfig)
     offline: bool = False
+    lock: Any = field(default_factory=__import__("threading").Lock)
 
 
 def run_agent(
     pbc_items: list[PBCItem],
     emails: list[EmailMessage],
     config: AgentConfig | None = None,
+    client_contacts: dict | None = None,
+    engagement_info: dict | None = None,
 ) -> AgentRun:
     """
     Main entry point. Processes all emails against the PBC list.
@@ -75,7 +85,15 @@ def run_agent(
         config = AgentConfig()
 
     tracker = TrackerState(items={item.id: item for item in pbc_items})
+    # Set contacts/engagement up front so follow-up drafting (inside this run)
+    # has recipient emails available. Build a real name->email directory from the
+    # mailbox so drafting uses observed addresses instead of guessing a domain.
+    from agent.ingest import build_contact_directory
+    tracker.client_contacts = client_contacts or {}
+    tracker.engagement_info = engagement_info or {}
+    tracker.contact_directory = build_contact_directory(emails, client_contacts)
     run = AgentRun(tracker=tracker, config=config)
+    run.parsed_documents = {}  # init before threads start (avoids race on first parse)
 
     # Offline/mock mode: no API key. Ingest deterministically and return the
     # parsed tracker so the deployed app is inspectable without LLM spend.
@@ -99,12 +117,21 @@ def run_agent(
 
     client = Anthropic()
 
-    # Phase 1: Process each email through the planning agent
-    for email in sorted(emails, key=lambda e: e.date):
-        trace = process_email(client, run, email)
-        run.traces.append(trace)
+    # Phase 1: Process emails concurrently. Emails are independent units of work and
+    # the slow part is LLM network I/O, so a thread pool cuts wall-clock time roughly
+    # linearly. Shared-state writes (tracker, cost, parsed docs) are guarded by a lock
+    # in tools.registry / tracker_ops; the LLM calls happen outside any lock.
+    ordered = sorted(emails, key=lambda e: e.date)
+    if config.max_workers > 1 and len(ordered) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=config.max_workers) as pool:
+            traces = list(pool.map(lambda e: process_email(client, run, e), ordered))
+        run.traces.extend(traces)
+    else:
+        for email in ordered:
+            run.traces.append(process_email(client, run, email))
 
-    # Phase 2: Generate follow-up drafts
+    # Phase 2: Generate follow-up drafts (needs the full tracker state, so it runs last)
     followup_trace = generate_followups(client, run)
     run.traces.append(followup_trace)
 
@@ -168,6 +195,7 @@ def plan_email(
     response = client.messages.create(
         model=run.config.planning_model,
         max_tokens=1024,
+        temperature=run.config.temperature,
         system=system_prompt,
         messages=[{"role": "user", "content": user_msg}],
         tools=[{
@@ -202,8 +230,7 @@ def plan_email(
         tool_choice={"type": "tool", "name": "plan_decision"},
     )
 
-    run.cost.input_tokens += response.usage.input_tokens
-    run.cost.output_tokens += response.usage.output_tokens
+    run.cost.add(response.usage)
 
     for block in response.content:
         if block.type == "tool_use":
@@ -230,13 +257,13 @@ def run_tool_loop(
         response = client.messages.create(
             model=run.config.extraction_model,
             max_tokens=4096,
+            temperature=run.config.temperature,
             system=system_prompt,
             messages=messages,
             tools=TOOL_DEFINITIONS,
         )
 
-        run.cost.input_tokens += response.usage.input_tokens
-        run.cost.output_tokens += response.usage.output_tokens
+        run.cost.add(response.usage)
 
         # Check if the agent is done (no more tool calls)
         if response.stop_reason == "end_turn":
@@ -295,11 +322,30 @@ def verify_item(
     if not item:
         return
 
-    system_prompt = """You are an audit verification agent. Your job is to check whether
-the evidence collected for a PBC item actually satisfies its acceptance criteria.
+    system_prompt = """You are an audit verification agent. Decide whether the evidence
+collected for a PBC item satisfies its acceptance criteria.
 
-Be strict: if the acceptance criteria say "all accounts" and only one was received,
-that is Insufficient. If the period doesn't match, that is Insufficient.
+Return one of three verdicts:
+- "sufficient": the evidence reasonably satisfies the request. If the item asks for a
+  single document (e.g. a fixed-asset register, an AR aging, a signed memo) and that
+  document was received and matches the entity/period, it is SUFFICIENT. Do not withhold
+  this verdict just because you cannot personally re-audit every number.
+- "insufficient": there is a CONCRETE, NAMEABLE gap between what was asked and what was
+  received. You must be able to state the specific missing piece. Valid reasons include:
+  the criteria require ALL accounts/entities/meetings and only some arrived; the wrong
+  entity or period; a threshold not met; an informal artifact where a formal one was
+  explicitly required (e.g. a photo instead of a signed reconciliation).
+- "not_started": no relevant evidence was received.
+
+Default to "sufficient" when a matching document arrived and you cannot name a specific
+gap. Reserve "insufficient" for a real, articulable shortfall — not general caution.
+
+Judge the document on the substance it actually contains, not on cross-references. If a
+required element is substantively present in the document itself (e.g. a signature is
+there, and the required figures/forecast are stated in the body), treat it as satisfied —
+even if the document also mentions a separate attachment. A mere reference to a missing
+supplementary attachment is not, by itself, grounds for "insufficient" when the required
+substance is already in the received document.
 
 You must call the verification_verdict tool with your decision."""
 
@@ -314,6 +360,7 @@ You must call the verification_verdict tool with your decision."""
     response = client.messages.create(
         model=run.config.verification_model,
         max_tokens=1024,
+        temperature=run.config.temperature,
         system=system_prompt,
         messages=[{"role": "user", "content": f"Verify this PBC item:\n\n{evidence_summary}"}],
         tools=[{
@@ -340,8 +387,7 @@ You must call the verification_verdict tool with your decision."""
         tool_choice={"type": "tool", "name": "verification_verdict"},
     )
 
-    run.cost.input_tokens += response.usage.input_tokens
-    run.cost.output_tokens += response.usage.output_tokens
+    run.cost.add(response.usage)
 
     for block in response.content:
         if block.type == "tool_use":
@@ -393,59 +439,83 @@ def generate_followups(
         return trace
 
     system_prompt = """You are drafting follow-up emails for an audit engagement.
-Group outstanding PBC items by recipient — send ONE email per person, not one per item.
-Be professional, specific about what's needed, and include deadlines.
 
-Use the draft_followup tool for each email you want to send."""
+Group outstanding PBC items by the client contact who owns them — send ONE email per
+recipient, not one per item. Map items to the right person using what the email threads
+showed (e.g. the controller is the primary contact and owns most items; the bookkeeper
+owns bank reconciliations). An item may go to more than one recipient if genuinely owned
+by both.
+
+CRITICAL RULES:
+- Use ONLY the exact email addresses from contact_directory below. Never invent or guess
+  an address or domain — copy the real address verbatim.
+- Prioritize items the client has actually been asked about or engaged with in the threads.
+  Do not dump every "Not started" item on the primary contact; focus the follow-up on what
+  is genuinely outstanding and in-flight.
+- For Insufficient items, state the specific missing piece.
+
+Call the draft_followup tool ONCE PER RECIPIENT (multiple times if multiple recipients).
+Do not write any prose outside the tool calls."""
 
     context = json.dumps({
         "outstanding_items": outstanding_items,
-        "client_contacts": run.tracker.client_contacts,
+        "contact_directory": run.tracker.contact_directory,
         "engagement": run.tracker.engagement_info,
     }, indent=2)
 
-    response = client.messages.create(
-        model=run.config.extraction_model,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": f"Draft follow-up emails:\n\n{context}"}],
-        tools=[{
-            "name": "draft_followup",
-            "description": "Draft a follow-up email to a client contact",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "recipient_email": {"type": "string"},
-                    "recipient_name": {"type": "string"},
-                    "subject": {"type": "string"},
-                    "body": {"type": "string"},
-                    "items_covered": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "rationale": {"type": "string"},
-                },
-                "required": ["recipient_email", "recipient_name", "subject", "body", "items_covered"]
-            }
-        }],
-    )
+    draft_tool = {
+        "name": "draft_followup",
+        "description": "Draft one grouped follow-up email to a single client contact.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "recipient_email": {"type": "string"},
+                "recipient_name": {"type": "string"},
+                "subject": {"type": "string"},
+                "body": {"type": "string"},
+                "items_covered": {"type": "array", "items": {"type": "string"}},
+                "rationale": {"type": "string"},
+            },
+            "required": ["recipient_email", "recipient_name", "subject", "body", "items_covered"]
+        }
+    }
 
-    run.cost.input_tokens += response.usage.input_tokens
-    run.cost.output_tokens += response.usage.output_tokens
+    # Tool-use loop so the model can emit multiple drafts (one per recipient).
+    messages = [{"role": "user", "content": f"Draft the grouped follow-up emails:\n\n{context}"}]
+    for _ in range(4):
+        response = client.messages.create(
+            model=run.config.extraction_model,
+            max_tokens=4096,
+            temperature=run.config.temperature,
+            system=system_prompt,
+            messages=messages,
+            tools=[draft_tool],
+        )
+        run.cost.add(response.usage)
 
-    for block in response.content:
-        if block.type == "tool_use":
-            draft = block.input
-            run.tracker.followup_drafts.append(draft)
-            trace.add_step(TraceStep(
-                phase="followup",
-                decision="draft_created",
-                reasoning=draft.get("rationale", ""),
-                tool_call=ToolCall(
-                    tool_name="draft_followup",
-                    tool_input=draft,
-                ),
-            ))
+        tool_results = []
+        made_draft = False
+        for block in response.content:
+            if block.type == "tool_use":
+                made_draft = True
+                draft = block.input
+                run.tracker.followup_drafts.append(draft)
+                trace.add_step(TraceStep(
+                    phase="followup",
+                    decision="draft_created",
+                    reasoning=draft.get("rationale", f"Draft to {draft.get('recipient_name','')}"),
+                    tool_call=ToolCall(tool_name="draft_followup", tool_input=draft),
+                ))
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": "Draft recorded.",
+                })
+
+        if response.stop_reason == "end_turn" or not made_draft:
+            break
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append({"role": "user", "content": tool_results})
 
     return trace
 

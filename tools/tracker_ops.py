@@ -29,6 +29,25 @@ def update_item_status(
     if not item:
         return {"error": f"Item {item_id} not found"}
 
+    # Guard tracker mutation — emails are processed concurrently.
+    lock = getattr(run, "lock", None)
+    if lock is not None:
+        lock.acquire()
+    try:
+        return _do_update(
+            item, status, reasoning, run, email, evidence_filename,
+            source_email_id, extracted_fields, citations,
+        )
+    finally:
+        if lock is not None:
+            lock.release()
+
+
+def _do_update(
+    item, status, reasoning, run, email, evidence_filename,
+    source_email_id, extracted_fields, citations,
+) -> dict[str, Any]:
+    item_id = item.id
     # Record evidence if a file was provided
     citation_check = None
     if evidence_filename:

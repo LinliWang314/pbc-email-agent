@@ -211,7 +211,12 @@ def execute_tool(
         if tool_name in ("parse_pdf", "parse_excel", "ocr_image"):
             filename = tool_input.get("filename")
             if filename and isinstance(result, dict) and "error" not in result:
-                run.parsed_documents[filename] = result
+                lock = getattr(run, "lock", None)
+                if lock is not None:
+                    with lock:
+                        run.parsed_documents[filename] = result
+                else:
+                    run.parsed_documents[filename] = result
         return result
     except Exception as e:
         return {"error": f"Tool {tool_name} failed: {str(e)}"}
