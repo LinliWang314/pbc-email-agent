@@ -150,8 +150,14 @@ Full plan → act → verify → draft run against the sample, scored vs. ground
 | Insufficiency-detection recall | **1.00** (every genuinely-insufficient item flagged) |
 | Insufficiency-detection precision | 0.83 (one stable judgment-boundary case, PBC-26) |
 | Follow-up recipient match | 2/2, item coverage 100% |
-| **Cost per PBC list** | **~$0.58** (well under the $2 target) |
+| **Cost per PBC list** | **~$0.38** with prompt caching (~$0.58 without), vs. the $2 target |
 | Wall-clock | ~165s (emails processed concurrently) |
+
+**Performance levers.** Two are in place: (1) emails are processed concurrently via a
+thread pool (520s → ~165s), and (2) **prompt caching** on the large static prefix (the full
+PBC list is embedded in the planning/extraction system prompts and reused across every
+call). On the sample, caching served ~124k tokens from cache vs ~9.5k written, cutting cost
+~35% (to ~$0.38). Cache read/write token counts are exposed in `/api/cost`.
 
 The single miss (PBC-26 going-concern memo) is a defensible judgment disagreement, not a
 parsing error — the agent's trace argues the referenced 12-month forecast attachment

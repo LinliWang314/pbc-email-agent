@@ -289,11 +289,14 @@ async def get_cost():
     """Get the cost breakdown for the current run."""
     if current_run is None:
         raise HTTPException(404, "No run has been executed yet")
+    c = current_run.cost
     return {
-        "input_tokens": current_run.cost.input_tokens,
-        "output_tokens": current_run.cost.output_tokens,
-        "total_cost_usd": current_run.cost.cost_usd,
-        "budget_remaining_usd": current_run.config.max_cost_usd - current_run.cost.cost_usd,
+        "input_tokens": c.input_tokens,
+        "output_tokens": c.output_tokens,
+        "cache_write_tokens": c.cache_write_tokens,
+        "cache_read_tokens": c.cache_read_tokens,
+        "total_cost_usd": c.cost_usd,
+        "budget_remaining_usd": current_run.config.max_cost_usd - c.cost_usd,
     }
 
 

@@ -33,29 +33,51 @@ from agent.config import AgentConfig
 from tools.registry import TOOL_DEFINITIONS, execute_tool
 
 
+def cached_system(text: str) -> list[dict]:
+    """
+    Wrap a system prompt as a cacheable block (Anthropic prompt caching).
+
+    The planning/extraction system prompts embed the full PBC list, which is identical
+    across every email in a run. Marking it with cache_control lets the API reuse the
+    prefix instead of re-processing it on each of the hundreds of calls — big latency and
+    cost win on large mailboxes (cache reads are ~0.1x the input price). The first call
+    writes the cache; the rest read it.
+    """
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
 @dataclass
 class CostTracker:
     """Tracks API costs across the run."""
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
     _lock: Any = field(default_factory=__import__("threading").Lock)
 
     def add(self, usage: Any) -> None:
-        """Thread-safe accumulation of token usage from a response."""
+        """Thread-safe accumulation of token usage from a response (incl. cache stats)."""
         with self._lock:
             self.input_tokens += usage.input_tokens
             self.output_tokens += usage.output_tokens
+            # Prompt-caching counters (present when cache_control is used)
+            self.cache_write_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
+            self.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
 
     @property
     def cost_usd(self) -> float:
-        haiku_input = 0.80 / 1_000_000
-        haiku_output = 4.00 / 1_000_000
-        sonnet_input = 3.00 / 1_000_000
-        sonnet_output = 15.00 / 1_000_000
-        # Approximate as weighted average (most calls are haiku)
-        avg_input = (haiku_input * 0.7 + sonnet_input * 0.3)
-        avg_output = (haiku_output * 0.7 + sonnet_output * 0.3)
-        return self.input_tokens * avg_input + self.output_tokens * avg_output
+        # Blended input/output rates (most calls are Haiku, extraction/verify are Sonnet).
+        haiku_input, haiku_output = 0.80 / 1e6, 4.00 / 1e6
+        sonnet_input, sonnet_output = 3.00 / 1e6, 15.00 / 1e6
+        avg_input = haiku_input * 0.7 + sonnet_input * 0.3
+        avg_output = haiku_output * 0.7 + sonnet_output * 0.3
+        # Prompt caching: writes cost 1.25x input, reads cost 0.1x input.
+        return (
+            self.input_tokens * avg_input
+            + self.output_tokens * avg_output
+            + self.cache_write_tokens * avg_input * 1.25
+            + self.cache_read_tokens * avg_input * 0.10
+        )
 
 
 @dataclass
@@ -197,7 +219,7 @@ def plan_email(
         model=run.config.planning_model,
         max_tokens=1024,
         temperature=run.config.temperature,
-        system=system_prompt,
+        system=cached_system(system_prompt),
         messages=[{"role": "user", "content": user_msg}],
         tools=[{
             "name": "plan_decision",
@@ -252,6 +274,7 @@ def run_tool_loop(
     until it signals completion. Uses Sonnet for complex extraction.
     """
     system_prompt = build_extraction_prompt(run)
+    system_blocks = cached_system(system_prompt)
     messages = [{"role": "user", "content": format_email_for_prompt(email, run)}]
 
     for iteration in range(max_iterations):
@@ -259,7 +282,7 @@ def run_tool_loop(
             model=run.config.extraction_model,
             max_tokens=4096,
             temperature=run.config.temperature,
-            system=system_prompt,
+            system=system_blocks,
             messages=messages,
             tools=TOOL_DEFINITIONS,
         )
@@ -386,7 +409,7 @@ You must call the verification_verdict tool with your decision."""
             model=run.config.verification_model,
             max_tokens=1024,
             temperature=temperature,
-            system=system_prompt,
+            system=cached_system(system_prompt),
             messages=[{"role": "user", "content": f"Verify this PBC item:\n\n{evidence_summary}"}],
             tools=[verdict_tool],
             tool_choice={"type": "tool", "name": "verification_verdict"},
@@ -553,9 +576,15 @@ Do not write any prose outside the tool calls."""
 # --- Prompt builders ---
 
 def build_planning_prompt(run: AgentRun) -> str:
-    """Build the system prompt for the planning phase."""
+    """
+    Build the system prompt for the planning phase.
+
+    Note: this intentionally omits per-item status. The prompt must be identical across
+    every email so it can be prompt-cached (status also isn't meaningful here — emails are
+    processed concurrently and relevance doesn't depend on current status).
+    """
     items_summary = "\n".join(
-        f"  {item.id}: [{item.category}] {item.description[:80]}... Status: {item.status}"
+        f"  {item.id}: [{item.category}] {item.description[:80]}..."
         for item in run.tracker.items.values()
     )
     return f"""You are a PBC (Prepared-By-Client) email triage agent for a financial audit.
