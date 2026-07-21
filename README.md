@@ -120,6 +120,12 @@ makes it visible and unable to silently corrupt a status decision.
    marked *Received/Complete* on that evidence — it is downgraded to *Under review* with the
    reason recorded in the trace. In a regulated domain, "needs a human" is the correct
    answer when confidence is low, not a confident wrong call.
+4. **Self-consistency voting on the verifier (optional, default off).** Implemented as a
+   tunable knob (`AgentConfig.verifier_votes`): run N verifier votes and take the majority.
+   Measured on the sample it did *not* reduce variance on the genuinely-ambiguous boundary
+   items — the diversity temperature just re-introduced noise at ~30% higher cost — so the
+   default is a single deterministic shot (temp 0), the most stable config measured. Left in
+   as an honest negative result and a lever for harder future cases.
 
 ## Eval strategy
 

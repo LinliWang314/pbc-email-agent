@@ -71,3 +71,12 @@ class AgentConfig:
     # Deterministic decisions: temperature 0 reduces run-to-run variance on
     # classification/verification (still not fully deterministic, but tighter).
     temperature: float = 0.0
+
+    # Self-consistency voting on the verifier (OPTIONAL, default off).
+    # Measured on the sample set, majority voting at higher temperature did NOT
+    # reduce variance on the genuinely-ambiguous boundary items (e.g. PBC-26) — it
+    # just added ~30% cost and re-introduced noise via the diversity temperature.
+    # Kept as a tunable knob, but default 1 (single deterministic shot at temp 0),
+    # which is the most stable configuration we measured. Set >1 to re-enable.
+    verifier_votes: int = 1
+    verifier_vote_temperature: float = 0.4

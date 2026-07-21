@@ -359,58 +359,85 @@ You must call the verification_verdict tool with your decision."""
         "evidence_received": [e.dict() for e in item.evidence],
     }, indent=2)
 
-    response = client.messages.create(
-        model=run.config.verification_model,
-        max_tokens=1024,
-        temperature=run.config.temperature,
-        system=system_prompt,
-        messages=[{"role": "user", "content": f"Verify this PBC item:\n\n{evidence_summary}"}],
-        tools=[{
-            "name": "verification_verdict",
-            "description": "Record the verification verdict for a PBC item",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "item_id": {"type": "string"},
-                    "verdict": {
-                        "type": "string",
-                        "enum": ["sufficient", "insufficient", "under_review", "not_started"],
-                    },
-                    "reasoning": {"type": "string"},
-                    "missing": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "What's still missing, if insufficient"
-                    },
+    verdict_tool = {
+        "name": "verification_verdict",
+        "description": "Record the verification verdict for a PBC item",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "item_id": {"type": "string"},
+                "verdict": {
+                    "type": "string",
+                    "enum": ["sufficient", "insufficient", "under_review", "not_started"],
                 },
-                "required": ["item_id", "verdict", "reasoning"]
-            }
-        }],
-        tool_choice={"type": "tool", "name": "verification_verdict"},
+                "reasoning": {"type": "string"},
+                "missing": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "What's still missing, if insufficient"
+                },
+            },
+            "required": ["item_id", "verdict", "reasoning"]
+        }
+    }
+
+    def one_vote(temperature: float) -> dict | None:
+        response = client.messages.create(
+            model=run.config.verification_model,
+            max_tokens=1024,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": f"Verify this PBC item:\n\n{evidence_summary}"}],
+            tools=[verdict_tool],
+            tool_choice={"type": "tool", "name": "verification_verdict"},
+        )
+        run.cost.add(response.usage)
+        for block in response.content:
+            if block.type == "tool_use":
+                return block.input
+        return None
+
+    # Self-consistency: run N independent votes and take the majority verdict.
+    # This dampens run-to-run variance on the boundary cases. First vote uses the
+    # configured (deterministic) temperature; extra votes use a higher temperature
+    # to produce genuine diversity rather than identical samples. N=1 restores the
+    # original single-shot behaviour.
+    n = max(1, run.config.verifier_votes)
+    votes: list[dict] = []
+    for i in range(n):
+        temp = run.config.temperature if i == 0 else run.config.verifier_vote_temperature
+        v = one_vote(temp)
+        if v:
+            votes.append(v)
+
+    if not votes:
+        return
+
+    from collections import Counter
+    tally = Counter(v["verdict"] for v in votes)
+    winning_verdict, _ = tally.most_common(1)[0]
+    # Use the reasoning from a vote that matches the winning verdict.
+    winner = next(v for v in votes if v["verdict"] == winning_verdict)
+
+    verdict = VerifierVerdict(
+        item_id=item_id,
+        verdict=winning_verdict,
+        reasoning=winner["reasoning"],
+        missing=winner.get("missing", []),
     )
+    # Record the vote breakdown in the trace when we actually voted (>1).
+    if n > 1:
+        verdict.reasoning = f"[vote {dict(tally)}] " + verdict.reasoning
+    trace.verifier_verdicts.append(verdict)
 
-    run.cost.add(response.usage)
-
-    for block in response.content:
-        if block.type == "tool_use":
-            verdict_data = block.input
-            verdict = VerifierVerdict(
-                item_id=item_id,
-                verdict=verdict_data["verdict"],
-                reasoning=verdict_data["reasoning"],
-                missing=verdict_data.get("missing", []),
-            )
-            trace.verifier_verdicts.append(verdict)
-
-            # Update tracker status based on verdict
-            status_map = {
-                "sufficient": "Received",
-                "insufficient": "Insufficient",
-                "under_review": "Under review",
-                "not_started": "Not started",
-            }
-            item.status = status_map.get(verdict.verdict, item.status)
-            item.verifier_reasoning = verdict.reasoning
+    status_map = {
+        "sufficient": "Received",
+        "insufficient": "Insufficient",
+        "under_review": "Under review",
+        "not_started": "Not started",
+    }
+    item.status = status_map.get(winning_verdict, item.status)
+    item.verifier_reasoning = verdict.reasoning
 
 
 def generate_followups(
