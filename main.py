@@ -136,6 +136,26 @@ async def get_status():
     return run_status
 
 
+@app.get("/api/version")
+async def version():
+    """Report the running code version so we can confirm what's deployed."""
+    import subprocess
+    sha = "unknown"
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True,
+                             cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip() or "unknown"
+    except Exception:
+        pass
+    # Feature markers — presence proves the newer code is running.
+    return {
+        "git_sha": sha,
+        "has_numeric_citation_matching": True,
+        "has_blend_confidence": True,
+        "marker": "confidence-fixes-v2",
+    }
+
+
 @app.get("/api/diag")
 async def diagnostics():
     """
