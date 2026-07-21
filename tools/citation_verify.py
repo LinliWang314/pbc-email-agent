@@ -39,15 +39,34 @@ def _as_number(s: str):
     return None
 
 
+def _numbers_in(s: str) -> list[float]:
+    """Extract all numeric values from a string (handles $, commas, decimals)."""
+    out = []
+    for tok in re.findall(r"-?\$?\s*\d[\d,]*(?:\.\d+)?", str(s)):
+        n = _as_number(tok)
+        if n is not None:
+            out.append(n)
+    return out
+
+
 def _values_match(claimed: str, candidate: str) -> bool:
     """
-    True if the claimed value matches the candidate text. Numbers are compared
-    numerically (so '214700', '$214,700.00' and '214700.0' all match); otherwise a
-    normalized substring check is used.
+    True if the claimed value matches the candidate text. Handles three cases:
+    - both are plain numbers → numeric compare ($214,700.00 == 214700)
+    - claimed is a descriptive citation like "Total AR: 1145100" → verified if every
+      number it mentions appears (numerically) in the candidate
+    - otherwise → normalized substring check
     """
     cn, dn = _as_number(claimed), _as_number(candidate)
     if cn is not None and dn is not None:
         return abs(cn - dn) < 0.01
+
+    claimed_nums = _numbers_in(claimed)
+    if claimed_nums:
+        cand_nums = _numbers_in(candidate)
+        # Every number cited must be present numerically in the candidate.
+        return all(any(abs(c - d) < 0.01 for d in cand_nums) for c in claimed_nums)
+
     nc = normalize(claimed)
     return bool(nc) and nc in normalize(candidate)
 
@@ -109,15 +128,24 @@ def verify_citation(
     # --- Excel cell citation ---
     if citation_type == "cell":
         sheets = parsed_document.get("sheets", {})
+        # 1) Try single-cell match (a citation naming one value in one cell).
         for sheet_data in sheets.values():
             for row in sheet_data.get("rows", []):
-                # reference like "B12" — check that exact cell, else any cell.
-                # Numbers are compared numerically so $214,700.00 matches 214700.
-                if reference in row and _values_match(claimed_value, row[reference]):
-                    return {"verified": True, "reason": f"value found in cell {reference}", "found_context": row[reference]}
                 for cell_ref, cell_val in row.items():
                     if _values_match(claimed_value, cell_val):
                         return {"verified": True, "reason": f"value found in cell {cell_ref}", "found_context": cell_val}
+        # 2) Descriptive citations (e.g. "Aging totals: Current 846400, 1-30: 195600, …")
+        #    span several cells — verify every cited number appears somewhere in the sheet.
+        claimed_nums = _numbers_in(claimed_value)
+        if claimed_nums:
+            all_cell_nums = []
+            for sheet_data in sheets.values():
+                for row in sheet_data.get("rows", []):
+                    for cell_val in row.values():
+                        all_cell_nums += _numbers_in(cell_val)
+            if all(any(abs(c - d) < 0.01 for d in all_cell_nums) for c in claimed_nums):
+                return {"verified": True, "reason": "all cited values found in sheet",
+                        "found_context": f"{len(claimed_nums)} value(s) matched"}
         return {"verified": False, "reason": f"value not found in cell {reference}", "found_context": None}
 
     # --- Image bbox citation (OCR) ---
