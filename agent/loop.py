@@ -161,6 +161,38 @@ def run_agent(
     return run
 
 
+import re as _re
+
+# Terms that hint an email may carry PBC-relevant content even without an attachment
+# (e.g. "the confirmations will follow", "PBC-12 is ready"). Kept broad on purpose —
+# the cost of a false "relevant" is one cheap Haiku plan call; the cost of a false
+# "skip" is a missed item, which we must avoid.
+_RELEVANCE_HINTS = _re.compile(
+    r"pbc[-\s]?\d+|attach|enclos|statement|reconcil|register|invoice|ledger|"
+    r"trial balance|aging|payroll|confirmation|minutes|memo|schedule|"
+    r"tax|lease|loan|insurance|going concern|provision|accrual|disposal|"
+    r"receivable|payable|register|workpaper|filing",
+    _re.IGNORECASE,
+)
+
+
+def _fast_skip_reason(email: EmailMessage) -> str | None:
+    """
+    Return a reason string if this email can be safely skipped without an LLM call,
+    else None. Conservative: only skips when there are NO attachments AND the body has
+    no PBC-relevance hints and is short (a brief acknowledgement, not a substantive ask).
+    """
+    if email.attachments:
+        return None  # any attachment → let the agent look at it
+    body = (email.body or "").strip()
+    if _RELEVANCE_HINTS.search(body) or _RELEVANCE_HINTS.search(email.subject or ""):
+        return None  # mentions something PBC-ish → defer to the planner
+    # No attachments, no relevance hints. Short acknowledgements are safe to skip.
+    if len(body) <= 200:
+        return "no attachments and body is a brief acknowledgement with no PBC-relevant terms"
+    return None  # longer body with no hints — still let the LLM decide, to be safe
+
+
 def process_email(
     client: Anthropic,
     run: AgentRun,
@@ -173,6 +205,20 @@ def process_email(
     extract fields, or skip if irrelevant.
     """
     trace = AgentTrace(email_id=email.message_id, subject=email.subject)
+
+    # Step 0: Deterministic fast-skip (no LLM). Skips emails that have no attachments
+    # AND whose body shows no sign of PBC-relevant content — e.g. "Working on it — J."
+    # This is the main wall-clock lever on large mailboxes (a whole plan→act→verify chain
+    # avoided per skipped email). Conservative by design: any attachment, or any hint of
+    # relevance, defers to the LLM planner. The skip + its reason are recorded in the trace.
+    skip_reason = _fast_skip_reason(email)
+    if skip_reason:
+        trace.add_step(TraceStep(
+            phase="plan",
+            decision="skip",
+            reasoning=f"Fast-skip (no LLM call): {skip_reason}",
+        ))
+        return trace
 
     # Step 1: Planning — decide what to do with this email
     plan = plan_email(client, run, email, trace)

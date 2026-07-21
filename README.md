@@ -153,11 +153,18 @@ Full plan → act → verify → draft run against the sample, scored vs. ground
 | **Cost per PBC list** | **~$0.38** with prompt caching (~$0.58 without), vs. the $2 target |
 | Wall-clock | ~165s (emails processed concurrently) |
 
-**Performance levers.** Two are in place: (1) emails are processed concurrently via a
-thread pool (520s → ~165s), and (2) **prompt caching** on the large static prefix (the full
-PBC list is embedded in the planning/extraction system prompts and reused across every
-call). On the sample, caching served ~124k tokens from cache vs ~9.5k written, cutting cost
-~35% (to ~$0.38). Cache read/write token counts are exposed in `/api/cost`.
+**Performance levers.** Three are in place:
+1. **Concurrency** — emails are processed in a thread pool (520s → ~165s on the sample).
+2. **Prompt caching** — the large static prefix (the full PBC list, embedded in the
+   planning/extraction system prompts) is marked with `cache_control` and reused across
+   every call. On the sample: ~124k tokens served from cache vs ~9.5k written, cost ~$0.58
+   → ~$0.38. Cache read/write counts are in `/api/cost`.
+3. **Deterministic fast-skip** — emails with no attachments and no PBC-relevance hints
+   (brief acknowledgements like "Working on it — J.") are skipped before any LLM call,
+   avoiding a whole plan→act→verify chain. Conservative by design (any attachment or any
+   PBC term defers to the planner), so on the tight 15-email sample it skips nothing; its
+   payoff is on large, noisy mailboxes where a meaningful fraction of mail is chatter. Every
+   skip is recorded in the trace with its reason.
 
 The single miss (PBC-26 going-concern memo) is a defensible judgment disagreement, not a
 parsing error — the agent's trace argues the referenced 12-month forecast attachment
