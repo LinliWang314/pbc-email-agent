@@ -114,6 +114,21 @@ def test_normalize():
     assert normalize("2026-06-30") == "2026-06-30"
 
 
+def test_numeric_equivalence_excel():
+    # Cell holds bare "214700"; agent cites the formatted "$214,700.00" — must match.
+    doc = {"sheets": {"S": {"rows": [{"G2": "214700"}]}}}
+    assert verify_citation("$214,700.00", {"type": "cell", "reference": "G2", "text": "$214,700.00"}, doc)["verified"]
+    # And a genuinely different number must NOT match.
+    assert not verify_citation("999999", {"type": "cell", "reference": "G2", "text": "999999"}, doc)["verified"]
+
+
+def test_numeric_equivalence_pdf():
+    doc = {"pages": [{"page_number": 1, "text": "Total assets 6800000 at year end"}],
+           "full_text": "Total assets 6800000 at year end"}
+    # Agent cites "$6,800,000.00"; document has bare 6800000.
+    assert verify_citation("$6,800,000.00", {"type": "page", "reference": "page 1", "text": "$6,800,000.00"}, doc)["verified"]
+
+
 if __name__ == "__main__":
     test_genuine_pdf_citation_passes()
     test_fabricated_pdf_citation_fails()
@@ -123,4 +138,6 @@ if __name__ == "__main__":
     test_verify_extraction_all_genuine()
     test_verify_extraction_with_fabrication()
     test_normalize()
+    test_numeric_equivalence_excel()
+    test_numeric_equivalence_pdf()
     print("All citation verification tests passed ✓")
