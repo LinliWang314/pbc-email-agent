@@ -278,10 +278,15 @@ def email_direction(email: EmailMessage, client_domains: set[str]) -> str:
     (a request/other from the audit firm or outside). Falls back to 'unknown' when we
     can't tell, which the agent treats conservatively.
     """
-    m = re.search(r"<([^>]+)>", email.sender or "") or re.search(r"([^\s<]+@[^\s>]+)", email.sender or "")
+    sender = email.sender or ""
+    # Normalize obfuscated addresses ("user at domain.com" → "user@domain.com"),
+    # seen in list archives and anti-scrape formats. Real .eml uses "Name <addr>".
+    sender_norm = re.sub(r"\s+at\s+", "@", sender)
+    m = (re.search(r"<([^>]+)>", sender_norm)
+         or re.search(r"([^\s<]+@[^\s>()]+)", sender_norm))
     if not m:
         return "unknown"
-    domain = m.group(1).split("@")[-1].lower()
+    domain = m.group(1).split("@")[-1].lower().strip(">.")
     if not client_domains:
         return "unknown"
     return "client" if domain in client_domains else "auditor"
