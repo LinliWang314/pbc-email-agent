@@ -427,6 +427,15 @@ present but its depth/format debatable? → under_review. Present and clearly ad
 sufficient. Judge the document on the substance it contains, not on cross-references to
 separate attachments.
 
+IMPORTANT — distinguish "the document lacks X" from "I didn't extract X". The extracted
+fields are a summary, not the whole document. If the right TYPE of document arrived for
+the right period/entity and your only concern is that a criterion (e.g. "reconciles to
+GL", an as-of date, supporting calculations) isn't visible IN THE EXTRACTED FIELDS, that
+is NOT grounds for "insufficient" — it may simply not have been extracted. Use
+"under_review" for that (human confirms), and reserve "insufficient" for a concrete gap
+you can point to: wrong period/entity, a threshold provably not met, an explicitly
+incomplete set (N of M received), or an informal artifact where a formal one was required.
+
 You must call the verification_verdict tool with your decision."""
 
     evidence_summary = json.dumps({

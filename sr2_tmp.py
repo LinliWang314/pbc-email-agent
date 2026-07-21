@@ -10,17 +10,10 @@ pbc=parse_pbc_list_llm(f"{D}/PBC_List_FY2026.pdf")
 emails=load_emails_from_directory(f"{D}/sample/emails")
 prof=load_client_profile(f"{D}/Client_Profile.pdf")
 set_attachments_dir(f"{D}/sample/attachments")
-t0=time.time()
 run=run_agent(pbc,emails,AgentConfig(),client_contacts=prof.get("contacts",{}))
-dt=time.time()-t0
 res=run.tracker.dict(); res["cost_usd"]=run.cost.cost_usd
 rep=run_evaluation(res,f"{D}/sample/sample_groundtruth.json")
-print_report(rep,cost_usd=run.cost.cost_usd)
-print(f"\nElapsed: {dt:.0f}s | emails: {len(emails)}")
-gt=json.load(open(f"{D}/sample/sample_groundtruth.json"))["expected_status"]
-print("\n=== TRAP outcomes ===")
-for iid,exp in gt.items():
-    if "trap" in exp:
-        got=run.tracker.items[iid].status
-        ok="PASS" if got in ("Insufficient","Under review") else "FAIL"
-        print(f"  {iid}: got={got} [{ok}] — {exp['trap'][:60]}")
+print("Overall:", rep["status_classification"]["overall_accuracy"])
+print("Insuff P/R:", rep["insufficiency_detection"]["precision"], rep["insufficiency_detection"]["recall"])
+for iid in ["PBC-07","PBC-14","PBC-16"]:
+    print(f"  {iid}: {run.tracker.items[iid].status}")
