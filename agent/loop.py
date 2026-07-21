@@ -119,6 +119,10 @@ def run_agent(
     # Used to tell client submissions (can produce evidence) from auditor requests.
     run.client_domains = derive_client_domains(emails, client_contacts)
     run.parsed_documents = {}  # init before threads start (avoids race on first parse)
+    # Pre-build the TF-IDF classification index before threads start, so concurrent
+    # emails don't race to build it lazily (duplicate work / half-built dict).
+    from tools.classification import _build_index
+    _build_index(run)
 
     # Offline/mock mode: no API key. Ingest deterministically and return the
     # parsed tracker so the deployed app is inspectable without LLM spend.
