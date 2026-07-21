@@ -241,8 +241,17 @@ def process_email(
     # Step 2: Tool-calling loop — agent picks tools until done
     run_tool_loop(client, run, email, trace)
 
-    # Step 3: Verification — separate model verifies extractions
-    for item_id in trace.affected_items:
+    # Step 3: Verification — verify every item the agent actually touched via
+    # update_item_status, not just the planner's predicted list. The agent may update
+    # an item the planner didn't name; those must still be verified (and get their
+    # final confidence), otherwise they keep a stale extraction-time value.
+    touched = set(trace.affected_items)
+    for step in trace.steps:
+        if step.tool_call and step.tool_call.tool_name == "update_item_status":
+            iid = step.tool_call.tool_input.get("item_id")
+            if iid:
+                touched.add(iid)
+    for item_id in touched:
         verify_item(client, run, item_id, trace)
 
     return trace
