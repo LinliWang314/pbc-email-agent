@@ -52,11 +52,16 @@ def _do_update(
     citation_check = None
     if evidence_filename:
         # --- Anti-hallucination guardrail: verify claimed citations against parsed content ---
-        confidence = 0.5  # default when we have no document to check against
+        # Confidence blends two signals: (a) did the agent's citations actually check out
+        # against the document, and (b) how decisive the status itself is. A clean document
+        # match with no explicit citations should still read as reasonably confident, not 0%.
         parsed_doc = getattr(run, "parsed_documents", {}).get(evidence_filename)
+        citation_conf = None
         if parsed_doc and citations:
             citation_check = verify_extraction(extracted_fields or {}, citations, parsed_doc)
-            confidence = citation_check["citation_confidence"]
+            citation_conf = citation_check["citation_confidence"]
+
+        confidence = _blend_confidence(status, citation_conf, bool(citations))
 
         evidence = Evidence(
             filename=evidence_filename,
@@ -64,6 +69,7 @@ def _do_update(
             extracted_fields=extracted_fields or {},
             citations=citations or [],
             confidence=confidence,
+            citation_conf=citation_conf,
         )
 
         # Version tracking: check if this supersedes an existing file
@@ -124,6 +130,37 @@ def get_item_status(item_id: str, run: Any = None) -> dict[str, Any]:
         "evidence": [e.dict() for e in item.evidence],
         "versions": item.versions,
     }
+
+
+def _blend_confidence(status: str, citation_conf: float | None, had_citations: bool) -> float:
+    """
+    Derive a display confidence for an item's evidence.
+
+    Combines the status decision with citation verification so the number is intuitive:
+    - A Received/Complete item reads as confident (the verifier judged it sufficient),
+      nudged up when its citations also grep-verified and down when they didn't.
+    - Insufficient/Under review sit in the middle — a real but not-final judgement.
+    - When the agent supplied no explicit citations we can't raise confidence on citation
+      grounds, but we don't punish a clean Received match down to 0% either.
+
+    citation_conf is the fraction of cited values that matched the document (0..1) or None
+    if no citation check ran.
+    """
+    base = {
+        "Received": 0.9,
+        "Complete": 0.95,
+        "Insufficient": 0.7,
+        "Under review": 0.6,
+        "Not started": 0.0,
+    }.get(status, 0.5)
+
+    if citation_conf is None:
+        # No citations to verify against — return the status-based confidence,
+        # slightly tempered so it doesn't overclaim certainty.
+        return round(base if not had_citations else base * 0.9, 2)
+
+    # Blend: 60% status decisiveness, 40% how well citations verified.
+    return round(0.6 * base + 0.4 * citation_conf, 2)
 
 
 def _is_same_document(filename1: str, filename2: str) -> bool:

@@ -15,6 +15,10 @@ class Evidence:
     extracted_fields: dict[str, Any] = field(default_factory=dict)
     citations: list[dict[str, Any]] = field(default_factory=list)
     confidence: float = 0.0
+    # Raw fraction of cited values that grep-verified against the doc (None if no
+    # citation check ran). Kept separate from the blended display `confidence` so the
+    # latter can be recomputed against the final verifier verdict without double-blending.
+    citation_conf: float | None = None
 
     def dict(self) -> dict:
         return {
@@ -23,6 +27,7 @@ class Evidence:
             "extracted_fields": self.extracted_fields,
             "citations": self.citations,
             "confidence": self.confidence,
+            "citation_conf": self.citation_conf,
         }
 
 

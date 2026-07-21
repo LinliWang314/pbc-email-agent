@@ -508,6 +508,13 @@ You must call the verification_verdict tool with your decision."""
     item.status = status_map.get(winning_verdict, item.status)
     item.verifier_reasoning = verdict.reasoning
 
+    # Re-derive evidence confidence to match the FINAL verifier verdict, so the number
+    # shown in the tracker is consistent with the decided status (evidence confidence was
+    # first set at extraction time, before the verifier ran).
+    from tools.tracker_ops import _blend_confidence
+    for ev in item.evidence:
+        ev.confidence = _blend_confidence(item.status, ev.citation_conf, bool(ev.citations))
+
 
 def generate_followups(
     client: Anthropic,
