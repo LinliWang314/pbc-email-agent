@@ -7,3 +7,4 @@ data/
 .DS_Store
 .pbc_cache/
 runs/
+stress_data/
