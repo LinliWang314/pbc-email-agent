@@ -101,9 +101,12 @@
 
     <div class="container">
         <div class="run-controls">
-            <input type="text" id="data-dir" placeholder="Data directory (blank = bundled sample)">
-            <button class="btn btn-run" onclick="startRun()">▶ Run Agent</button>
+            <button class="btn btn-run" onclick="startRun()">▶ Run on sample</button>
+            <span style="color:#94a3b8;font-size:0.85rem;">or</span>
+            <input type="file" id="bundle-file" accept=".zip" style="font-size:0.85rem;">
+            <button class="btn" style="background:#7c3aed;color:#fff;" onclick="uploadBundle()">⤴ Upload &amp; run a .zip bundle</button>
         </div>
+        <div class="view-hint" style="margin-top:-0.5rem;">Upload a .zip containing the PBC list PDF, the <code>.eml</code> emails, and the attachments (any folder layout). Or run the bundled sample.</div>
         <div class="summary-chips" id="summary-chips"></div>
 
         <div id="view-tracker">
@@ -151,6 +154,23 @@
                 });
                 const kick = await resp.json();
                 if (!resp.ok) throw new Error(kick.detail || 'Run failed to start');
+                await pollStatus(btn);
+            } catch (e) {
+                btn.textContent = '✗ Error'; btn.disabled = false; alert(e.message);
+            }
+        }
+
+        async function uploadBundle() {
+            const input = document.getElementById('bundle-file');
+            if (!input.files.length) { alert('Choose a .zip bundle first.'); return; }
+            const btn = document.querySelector('.btn-run');
+            btn.textContent = '⤴ Uploading…'; btn.disabled = true;
+            try {
+                const fd = new FormData();
+                fd.append('bundle', input.files[0]);
+                const resp = await fetch('/api/upload', {method: 'POST', body: fd});
+                const kick = await resp.json();
+                if (!resp.ok) throw new Error(kick.detail || 'Upload failed');
                 await pollStatus(btn);
             } catch (e) {
                 btn.textContent = '✗ Error'; btn.disabled = false; alert(e.message);

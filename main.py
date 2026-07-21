@@ -298,43 +298,75 @@ async def get_cost():
 
 
 @app.post("/api/upload")
-async def upload_data(
-    pbc_list: UploadFile = File(...),
-    mailbox: UploadFile = File(...),
-    attachments: list[UploadFile] = File(default=[]),
-):
-    """Upload a new mailbox + PBC list for processing."""
-    # Create temp directory for uploaded data
-    upload_dir = tempfile.mkdtemp(prefix="pbc_upload_")
-    sample_dir = os.path.join(upload_dir, "sample")
-    emails_dir = os.path.join(sample_dir, "emails")
-    attach_dir = os.path.join(sample_dir, "attachments")
+async def upload_data(bundle: UploadFile = File(...)):
+    """
+    Upload a single ZIP bundle (e.g. the held-out mailbox) and start a run on it.
+
+    The archive is unpacked and normalized into the expected layout regardless of its
+    internal folder structure: we locate the PBC list PDF, the .eml emails, and the
+    attachments wherever they sit in the tree. This tolerates the held-out data arriving
+    in whatever shape it's zipped in.
+    """
+    import zipfile
+
+    if not bundle.filename.endswith(".zip"):
+        raise HTTPException(400, "Please upload a .zip bundle (PBC PDF + emails + attachments).")
+
+    work = tempfile.mkdtemp(prefix="pbc_bundle_")
+    raw = os.path.join(work, "raw")
+    os.makedirs(raw, exist_ok=True)
+    zip_path = os.path.join(work, bundle.filename)
+    with open(zip_path, "wb") as f:
+        f.write(await bundle.read())
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(raw)
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "Uploaded file is not a valid ZIP.")
+
+    # Normalize into <data>/PBC_List.pdf + <data>/sample/emails + <data>/sample/attachments
+    data_dir = os.path.join(work, "data")
+    emails_dir = os.path.join(data_dir, "sample", "emails")
+    attach_dir = os.path.join(data_dir, "sample", "attachments")
     os.makedirs(emails_dir, exist_ok=True)
     os.makedirs(attach_dir, exist_ok=True)
 
-    # Save PBC list
-    pbc_path = os.path.join(upload_dir, pbc_list.filename)
-    with open(pbc_path, "wb") as f:
-        f.write(await pbc_list.read())
+    pbc_pdf = None
+    profile_pdf = None
+    for root, _dirs, files in os.walk(raw):
+        for fn in files:
+            src = os.path.join(root, fn)
+            low = fn.lower()
+            if low.endswith(".eml"):
+                shutil.copy(src, os.path.join(emails_dir, fn))
+            elif low.startswith("pbc") and low.endswith(".pdf"):
+                pbc_pdf = src
+            elif "profile" in low and low.endswith(".pdf"):
+                profile_pdf = src
+            elif low.endswith((".pdf", ".xlsx", ".xls", ".jpg", ".jpeg", ".png", ".zip", ".docx", ".csv")):
+                # everything else that looks like an attachment
+                shutil.copy(src, os.path.join(attach_dir, fn))
 
-    # Save mailbox (could be .mbox or .zip of .eml files)
-    mailbox_path = os.path.join(sample_dir, mailbox.filename)
-    with open(mailbox_path, "wb") as f:
-        f.write(await mailbox.read())
+    if pbc_pdf:
+        shutil.copy(pbc_pdf, os.path.join(data_dir, "PBC_List_FY2026.pdf"))
+    else:
+        raise HTTPException(400, "No PBC list PDF found in the bundle (expected a file whose name starts with 'PBC' and ends in .pdf).")
+    if profile_pdf:
+        shutil.copy(profile_pdf, os.path.join(data_dir, "Client_Profile.pdf"))
 
-    # If it's a zip, extract emails
-    if mailbox.filename.endswith(".zip"):
-        import zipfile
-        with zipfile.ZipFile(mailbox_path, "r") as z:
-            z.extractall(emails_dir)
+    n_emails = len(os.listdir(emails_dir))
+    if n_emails == 0:
+        raise HTTPException(400, "No .eml emails found in the bundle.")
 
-    # Save attachments
-    for attachment in attachments:
-        att_path = os.path.join(attach_dir, attachment.filename)
-        with open(att_path, "wb") as f:
-            f.write(await attachment.read())
-
-    return {"upload_dir": upload_dir, "status": "uploaded"}
+    # Kick off a run against the uploaded data (same background-job path as /api/run).
+    global run_status
+    with _run_lock:
+        if run_status.get("state") == "running":
+            return {"status": "already_running"}
+        run_status = {"state": "running", "message": f"Processing uploaded bundle ({n_emails} emails)…"}
+    threading.Thread(target=_execute_run, args=(RunConfig(data_dir=data_dir),), daemon=True).start()
+    return {"status": "started", "emails": n_emails,
+            "attachments": len(os.listdir(attach_dir))}
 
 
 # Serve the frontend
