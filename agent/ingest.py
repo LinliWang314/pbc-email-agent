@@ -250,6 +250,43 @@ def build_contact_directory(
     return client_side if client_side else list(seen.values())
 
 
+def derive_client_domains(
+    emails: list[EmailMessage],
+    profile_contacts: dict[str, str] | None = None,
+) -> set[str]:
+    """
+    Derive the client's email domain(s) from the profile contacts' addresses in the
+    mailbox — WITHOUT hardcoding any domain (the engagement is swapped at review).
+
+    Client contacts (CFO/Controller/Bookkeeper names from the profile) are matched to
+    their observed addresses; their domains are the "client side". Everything else
+    (the audit firm, third parties) is treated as non-client. Used to tell whether an
+    email is a client SUBMISSION (can produce evidence) vs an auditor REQUEST (cannot).
+    """
+    directory = build_contact_directory(emails, profile_contacts)
+    domains = set()
+    for c in directory:
+        addr = c.get("email", "")
+        if "@" in addr and c.get("role"):
+            domains.add(addr.split("@", 1)[1].lower())
+    return domains
+
+
+def email_direction(email: EmailMessage, client_domains: set[str]) -> str:
+    """
+    Classify an email as 'client' (a submission from the client side) or 'auditor'
+    (a request/other from the audit firm or outside). Falls back to 'unknown' when we
+    can't tell, which the agent treats conservatively.
+    """
+    m = re.search(r"<([^>]+)>", email.sender or "") or re.search(r"([^\s<]+@[^\s>]+)", email.sender or "")
+    if not m:
+        return "unknown"
+    domain = m.group(1).split("@")[-1].lower()
+    if not client_domains:
+        return "unknown"
+    return "client" if domain in client_domains else "auditor"
+
+
 def load_client_profile(pdf_path: str) -> dict[str, Any]:
     """Parse client profile PDF into structured data."""
     try:

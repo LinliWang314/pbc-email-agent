@@ -110,11 +110,14 @@ def run_agent(
     # Set contacts/engagement up front so follow-up drafting (inside this run)
     # has recipient emails available. Build a real name->email directory from the
     # mailbox so drafting uses observed addresses instead of guessing a domain.
-    from agent.ingest import build_contact_directory
+    from agent.ingest import build_contact_directory, derive_client_domains
     tracker.client_contacts = client_contacts or {}
     tracker.engagement_info = engagement_info or {}
     tracker.contact_directory = build_contact_directory(emails, client_contacts)
     run = AgentRun(tracker=tracker, config=config)
+    # Domains that count as "the client" — derived from profile contacts, not hardcoded.
+    # Used to tell client submissions (can produce evidence) from auditor requests.
+    run.client_domains = derive_client_domains(emails, client_contacts)
     run.parsed_documents = {}  # init before threads start (avoids race on first parse)
 
     # Offline/mock mode: no API key. Ingest deterministically and return the
@@ -745,12 +748,24 @@ def format_email_for_prompt(email: EmailMessage, run: AgentRun) -> str:
         for a in email.attachments
     ) or "  (none)"
 
+    from agent.ingest import email_direction
+    direction = email_direction(email, getattr(run, "client_domains", set()))
+    direction_note = {
+        "auditor": "DIRECTION: from the AUDIT FIRM (a request/reminder to the client). "
+                   "An auditor request does NOT constitute received evidence — do not mark "
+                   "an item Received/Insufficient based on the auditor asking for it.",
+        "client": "DIRECTION: from the CLIENT (a submission). Attachments here may be "
+                  "evidence for PBC items.",
+        "unknown": "DIRECTION: unclear — treat attachments as possible evidence but be cautious.",
+    }[direction]
+
     return f"""Email:
 From: {email.sender}
 To: {email.recipients}
 Date: {email.date}
 Subject: {email.subject}
 Thread: {email.thread_id}
+{direction_note}
 
 Body:
 {email.body}
