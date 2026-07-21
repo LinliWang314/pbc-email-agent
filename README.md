@@ -78,6 +78,58 @@ python tests/test_extraction.py
 
 Core agent loop lives in a single inspectable file: **`agent/loop.py`** (~300 lines).
 
+## The agentic workflow (how it actually works)
+
+This is a real agent — the model decides control flow via **native Anthropic tool-use** —
+not a hardcoded pipeline or a prompt-stitching chain. Per email, three phases:
+
+**1. PLAN (`plan_email`, Haiku).** The cheap model is forced to call a `plan_decision`
+tool and returns `{action: process|skip, relevant_items, reasoning}`. This is the dynamic
+control-flow gate: irrelevant emails are skipped for almost no cost. A deterministic
+`_fast_skip` runs first and drops pure acknowledgements (no attachment, no PBC terms)
+before any LLM call at all.
+
+**2. ACT (`run_tool_loop`, Sonnet).** The real agent loop. The model is given the full
+tool set and **chooses which tools to call itself**; we execute them and feed results back:
+
+```python
+for _ in range(max_iterations):
+    resp = client.messages.create(model=..., system=cached_system(...),
+                                   messages=messages, tools=TOOL_DEFINITIONS)
+    if resp.stop_reason == "end_turn":
+        break                                  # model decides it's done
+    for block in resp.content:
+        if block.type == "tool_use":
+            result = execute_tool(block.name, block.input, run, email)
+            tool_results.append({... "content": result})
+    messages += [assistant(resp.content), user(tool_results)]   # feed back, loop
+```
+
+The model picks `parse_pdf` vs `parse_excel` vs `ocr_image` vs `parse_zip` based on the
+attachment, extracts fields with citations, and calls `update_item_status`. Nothing about
+the order is hardcoded — that's what makes it an agent. Two similar-looking emails take
+different tool paths (an Excel → `parse_excel` → Received; a whiteboard photo →
+`ocr_image` → Insufficient), and the trace shows exactly why.
+
+**3. VERIFY (`verify_item`, Sonnet).** A *separate* call decides sufficient / insufficient /
+under_review / not_started against the acceptance criteria. It sees only the structured
+extracted fields + criteria — never the raw document — so it cannot introduce new "facts."
+
+Tools are the abstraction (schemas in `tools/registry.py`): `parse_pdf`, `parse_excel`,
+`ocr_image`, `parse_zip`, `classify_document`, `extract_fields`, `update_item_status`,
+`get_item_status`. Every plan, tool call, and verdict is recorded on the per-email
+`AgentTrace`, which is what the UI's Agent Traces tab renders.
+
+### On hallucination (honest)
+
+The design assumption is that the LLM *will* hallucinate; the system makes it visible and
+unable to silently corrupt a status decision (see "Hallucination guardrails" below):
+citation re-verification against the real document, extract/verify separation, and
+confidence-based degradation to *Under review*. Measured: overall accuracy 96.7–100% and
+**insufficiency recall is always 1.0** — a genuinely incomplete item is never missed. The
+residual is the occasional judgment-boundary call (e.g. PBC-26), which we surface with a
+defensible trace rather than hide.
+
 ## Model choices per step
 
 | Step | Model | Why |
