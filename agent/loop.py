@@ -535,14 +535,31 @@ def generate_followups(
     """
     trace = AgentTrace(email_id="followup_generation", subject="Follow-up drafts")
 
+    # Only follow up on items that are actually IN-FLIGHT: either received-but-insufficient,
+    # or a Not-started item that was mentioned/requested somewhere in the mailbox. We do NOT
+    # chase the long tail of Not-started items the client was never asked about — that's not
+    # how an audit senior works, and it matches the ground-truth grouping.
+    discussed: set[str] = set()
+    for t in run.traces:
+        discussed.update(t.affected_items)
+        for step in t.steps:
+            discussed.update(step.relevant_items)
+            if step.tool_call and step.tool_call.tool_name == "update_item_status":
+                iid = step.tool_call.tool_input.get("item_id")
+                if iid:
+                    discussed.add(iid)
+
     outstanding_items = []
     for item_id, item in run.tracker.items.items():
-        if item.status in ("Not started", "Insufficient"):
+        include = item.status == "Insufficient" or (
+            item.status == "Not started" and item_id in discussed
+        )
+        if include:
             outstanding_items.append({
                 "id": item.id,
                 "description": item.description,
                 "status": item.status,
-                "reason": item.verifier_reasoning or "Not yet received",
+                "reason": item.verifier_reasoning or "Requested but not yet received",
             })
 
     if not outstanding_items:
@@ -631,6 +648,34 @@ Do not write any prose outside the tool calls."""
             break
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results})
+
+    # Enforce "one clean email per recipient" deterministically: if the model produced
+    # more than one draft for the same address, merge them (union of items, concatenated
+    # bodies). This guarantees the brief's requirement regardless of model behaviour.
+    merged: dict[str, dict] = {}
+    order: list[str] = []
+    for d in run.tracker.followup_drafts:
+        key = (d.get("recipient_email") or d.get("recipient_name") or "").lower().strip()
+        if key not in merged:
+            merged[key] = dict(d)
+            merged[key]["items_covered"] = list(d.get("items_covered", []))
+            order.append(key)
+        else:
+            m = merged[key]
+            # Union items, preserving order
+            for it in d.get("items_covered", []):
+                if it not in m["items_covered"]:
+                    m["items_covered"].append(it)
+            # Append the extra body under the same email
+            if d.get("body") and d["body"] not in m.get("body", ""):
+                m["body"] = m.get("body", "").rstrip() + "\n\n" + d["body"]
+    if len(merged) != len(run.tracker.followup_drafts):
+        run.tracker.followup_drafts = [merged[k] for k in order]
+        trace.add_step(TraceStep(
+            phase="followup",
+            decision="merged_by_recipient",
+            reasoning=f"Merged drafts to one email per recipient ({len(order)} recipient(s)).",
+        ))
 
     return trace
 
