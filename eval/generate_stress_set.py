@@ -195,10 +195,87 @@ def build():
     for i, (subj, body) in enumerate(noise):
         emit(20 + i, 8, SENDER, AUDITOR, subj, body)
 
+    # ---- More clean Received items with RICH documents (so complete items pass) ----
+    _pdf(ATTACH / "scan0042.pdf",   # messy filename on purpose
+         "Officer and Director Compensation Schedule FY2026. CEO David Okafor base salary "
+         "420000 bonus 150000. CFO base 310000 bonus 90000. Director fees 40000 each. Total "
+         "officer compensation FY2026 1250000. Period July 2025 to June 2026.")
+    emit(40, 10, SENDER, AUDITOR, "PBC-17 officer comp",
+         "Officer and director compensation schedule for FY26 attached.", ["scan0042.pdf"])
+    truth["PBC-17"] = {"status": "Received"}
+
+    _xlsx(ATTACH / "headcount_recon_FINAL.xlsx",
+          [["Metric", "Count"], ["Opening headcount Jul 2025", 210], ["Hires", 34],
+           ["Terminations", 19], ["Closing headcount Jun 2026", 225]])
+    emit(41, 10, SENDER, AUDITOR, "PBC-18 headcount reconciliation",
+         "Headcount reconciliation opening hires terminations closing for FY2026.", ["headcount_recon_FINAL.xlsx"])
+    truth["PBC-18"] = {"status": "Received"}
+
+    _pdf(ATTACH / "Form5500_401k_FY26.pdf",
+         "Form 5500 filing confirmation 401(k) plan. Plan contributions FY2026 total 1850000 "
+         "employer match 620000. Filed with DOL. Reconciliation to payroll attached.")
+    emit(42, 10, SENDER, AUDITOR, "PBC-19 401k form 5500",
+         "401k plan contribution reconciliation and Form 5500 filing confirmation.", ["Form5500_401k_FY26.pdf"])
+    truth["PBC-19"] = {"status": "Received"}
+
+    _pdf(ATTACH / "Prior_Year_1120_FY2025.pdf",
+         "Form 1120 U.S. Corporation Income Tax Return FY2025 as filed. Taxable income 8400000 "
+         "federal tax 1764000. State returns Colorado California attached. Prior year 2025.")
+    emit(43, 11, SENDER, AUDITOR, "PBC-22 prior year tax return",
+         "Prior-year federal Form 1120 and state returns as filed.", ["Prior_Year_1120_FY2025.pdf"])
+    truth["PBC-22"] = {"status": "Received"}
+
+    _pdf(ATTACH / "Insurance_Schedule_YE.pdf",
+         "Insurance Policy Schedule as of June 30 2026. General liability 5M coverage. Property "
+         "12M. D&O 10M. Workers comp statutory. Cyber 3M. All policies in effect at year end.")
+    emit(44, 11, SENDER, AUDITOR, "PBC-30 insurance schedule",
+         "Insurance policy schedule with coverage summaries for all policies at year-end.", ["Insurance_Schedule_YE.pdf"])
+    truth["PBC-30"] = {"status": "Received"}
+
+    _xlsx(ATTACH / "Lease_Inventory_ASC842.xlsx",
+          [["Lease", "ROU Asset", "Liability", "Term"], ["Denver HQ", 2400000, 2400000, "10yr"],
+           ["Warehouse", 890000, 890000, "5yr"], ["Note", "ASC 842 worksheets included", "", ""]])
+    emit(45, 11, SENDER, AUDITOR, "PBC-28 lease inventory",
+         "Complete lease inventory with ASC 842 lease accounting worksheets.", ["Lease_Inventory_ASC842.xlsx"])
+    truth["PBC-28"] = {"status": "Received"}
+
+    # ---- TRAP: Q2 sent when Q3 asked (right family, wrong document) → Insufficient ----
+    _pdf(ATTACH / "Final_v3_REAL.pdf",   # deliberately unhelpful name
+         "Statement of Cash Flows FY2026 indirect method. Operating 7200000 investing -3100000 "
+         "financing -1800000. Net change in cash 2300000. Consolidated all entities.")
+    emit(46, 12, SENDER, AUDITOR, "PBC-03 cash flows (also re PBC-02?)",
+         "Attaching what you asked for — think this covers the income statement request too.",
+         ["Final_v3_REAL.pdf"])
+    truth["PBC-03"] = {"status": "Received"}
+    truth["PBC-02"] = {"status": "Insufficient",
+                       "trap": "client claims this covers PBC-02 but it's a cash flow stmt, not income stmt/BS"}
+
+    # ---- Forward chain / multi-recipient thread ----
+    fwd = emit(47, 13, AUDITOR, f"{SENDER}, {CFO}", "Fwd: outstanding items week 3",
+               "Forwarding the running list of what's still open. Please prioritize the cash items.")
+    emit(48, 13, SENDER, AUDITOR, "Re: Fwd: outstanding items week 3",
+         "Acknowledged — Sam is pulling the bank recs, I'll handle the rest.", reply=fwd)
+
+    # ---- Noise emails (no PBC content) — should be skipped, not misclassified ----
+    noise = [
+        ("Lunch next week?", "Are you free for lunch on Thursday? — J"),
+        ("Out of office", "I'll be OOO Friday, back Monday."),
+        ("Re: parking", "The garage will be closed this weekend for maintenance."),
+        ("Thanks", "Thanks so much for your help earlier, really appreciated it."),
+        ("Quick hello", "Great to meet you at the conference last month!"),
+        ("Coffee chat", "Loved catching up. Let's do it again soon."),
+        ("Reminder: all-hands", "Company all-hands is Friday at 2pm in the main room."),
+        ("Re: birthday", "Happy birthday!! Hope you have a great one."),
+        ("Fwd: newsletter", "Thought you might find this industry newsletter interesting."),
+        ("Re: expense report", "Your Q2 expense report was approved, nothing needed from you."),
+    ]
+    for i, (subj, body) in enumerate(noise):
+        emit(50 + i, 14, SENDER, AUDITOR, subj, body)
+
     # ---- Filler acknowledgements referencing items (in-flight, no attachment) ----
-    for i, iid in enumerate(["PBC-02", "PBC-03", "PBC-06", "PBC-23"]):
-        emit(30 + i, 9, SENDER, AUDITOR, f"Re: {iid}",
-             f"Working on {iid}, will send by end of week.")
+    for i, iid in enumerate(["PBC-06", "PBC-23", "PBC-20", "PBC-21", "PBC-24", "PBC-25", "PBC-27", "PBC-29"]):
+        emit(60 + i, 15, SENDER, AUDITOR, f"Re: {iid} status",
+             f"Still working on {iid}, expect to send it by the end of next week.")
         truth.setdefault(iid, {"status": "Not started", "note": "requested, not yet received"})
 
     # Remaining items: Not started (never mentioned)
@@ -217,11 +294,22 @@ def build():
     shutil.copy(src / "PBC_List_FY2026.pdf", OUT / "PBC_List_FY2026.pdf")
     shutil.copy(src / "Client_Profile.pdf", OUT / "Client_Profile.pdf")
 
+    # ---- Also produce a single uploadable ZIP bundle (for the UI upload path) ----
+    bundle = OUT / "stress_bundle.zip"
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(OUT / "PBC_List_FY2026.pdf", "PBC_List_FY2026.pdf")
+        z.write(OUT / "Client_Profile.pdf", "Client_Profile.pdf")
+        for p in EMAILS.glob("*.eml"):
+            z.write(p, f"emails/{p.name}")
+        for p in ATTACH.glob("*"):
+            z.write(p, f"attachments/{p.name}")
+
     n_emails = len(list(EMAILS.glob("*.eml")))
     n_att = len(list(ATTACH.glob("*")))
     print(f"Wrote stress set: {n_emails} emails, {n_att} attachments, {len(truth)} items to {OUT}")
     traps = {k: v for k, v in truth.items() if "trap" in v}
     print(f"Traps: {list(traps.keys())}")
+    print(f"Uploadable bundle: {bundle}")
 
 
 if __name__ == "__main__":
