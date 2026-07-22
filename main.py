@@ -43,6 +43,25 @@ current_run: AgentRun | None = None
 # Run status for the async job: idle | running | complete | error
 run_status: dict = {"state": "idle", "message": "", "started": False}
 _run_lock = threading.Lock()
+_run_thread: threading.Thread | None = None   # the worker; used to detect a dead run
+_RUN_TIMEOUT_S = 15 * 60                        # a run older than this is treated as stale
+
+
+def _run_is_stuck() -> bool:
+    """
+    True if run_status says 'running' but the run is actually dead/stale — the worker
+    thread has exited (crash/deploy restart) or it has run past the timeout. Without this,
+    a single interrupted run would deadlock the app in 'running' forever.
+    """
+    if run_status.get("state") != "running":
+        return False
+    started = run_status.get("_started_at")
+    if _run_thread is not None and not _run_thread.is_alive():
+        return True
+    import time as _t
+    if started and (_t.time() - started) > _RUN_TIMEOUT_S:
+        return True
+    return False
 
 
 class RunConfig(BaseModel):
@@ -121,18 +140,26 @@ def _execute_run(config: RunConfig) -> None:
 @app.post("/api/run")
 async def start_run(config: RunConfig):
     """Kick off an agent run in the background; returns immediately."""
-    global run_status
+    global run_status, _run_thread
+    import time as _t
     with _run_lock:
-        if run_status.get("state") == "running":
+        if run_status.get("state") == "running" and not _run_is_stuck():
             return {"status": "already_running"}
-        run_status = {"state": "running", "message": "Agent run in progress…"}
-    threading.Thread(target=_execute_run, args=(config,), daemon=True).start()
+        run_status = {"state": "running", "message": "Agent run in progress…",
+                      "_started_at": _t.time()}
+    _run_thread = threading.Thread(target=_execute_run, args=(config,), daemon=True)
+    _run_thread.start()
     return {"status": "started"}
 
 
 @app.get("/api/status")
 async def get_status():
-    """Poll the status of the current/last run."""
+    """Poll the status of the current/last run. Reports a dead/stale run as error so
+    the client stops waiting forever and can retry."""
+    if _run_is_stuck():
+        return {"state": "error",
+                "message": "Previous run did not finish (worker exited or timed out). "
+                           "Click Run again to start a fresh one."}
     return run_status
 
 
@@ -382,12 +409,15 @@ async def upload_data(bundle: UploadFile = File(...)):
         raise HTTPException(400, "No .eml emails found in the bundle.")
 
     # Kick off a run against the uploaded data (same background-job path as /api/run).
-    global run_status
+    global run_status, _run_thread
+    import time as _t
     with _run_lock:
-        if run_status.get("state") == "running":
+        if run_status.get("state") == "running" and not _run_is_stuck():
             return {"status": "already_running"}
-        run_status = {"state": "running", "message": f"Processing uploaded bundle ({n_emails} emails)…"}
-    threading.Thread(target=_execute_run, args=(RunConfig(data_dir=data_dir),), daemon=True).start()
+        run_status = {"state": "running", "message": f"Processing uploaded bundle ({n_emails} emails)…",
+                      "_started_at": _t.time()}
+    _run_thread = threading.Thread(target=_execute_run, args=(RunConfig(data_dir=data_dir),), daemon=True)
+    _run_thread.start()
     return {"status": "started", "emails": n_emails,
             "attachments": len(os.listdir(attach_dir))}
 
