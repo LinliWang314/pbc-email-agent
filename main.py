@@ -393,24 +393,44 @@ async def upload_data(bundle: UploadFile = File(...)):
 
     pbc_pdf = None
     profile_pdf = None
+    pdf_candidates = []   # fallback pool if no obviously-named PBC pdf is found
+    mbox_files = []
     for root, _dirs, files in os.walk(raw):
         for fn in files:
             src = os.path.join(root, fn)
             low = fn.lower()
             if low.endswith(".eml"):
                 shutil.copy(src, os.path.join(emails_dir, fn))
-            elif low.startswith("pbc") and low.endswith(".pdf"):
-                pbc_pdf = src
+            elif low.endswith(".mbox") or low == "mbox":
+                mbox_files.append(src)
             elif "profile" in low and low.endswith(".pdf"):
                 profile_pdf = src
+            elif low.endswith(".pdf") and (low.startswith("pbc") or "pbc" in low
+                                           or "request" in low or "list" in low):
+                pbc_pdf = pbc_pdf or src   # obviously-named PBC list
             elif low.endswith((".pdf", ".xlsx", ".xls", ".jpg", ".jpeg", ".png", ".zip", ".docx", ".csv")):
-                # everything else that looks like an attachment
+                if low.endswith(".pdf"):
+                    pdf_candidates.append(src)
                 shutil.copy(src, os.path.join(attach_dir, fn))
+
+    # If a .mbox was provided instead of loose .eml files, expand it to .eml.
+    if mbox_files and len(os.listdir(emails_dir)) == 0:
+        import mailbox as _mb
+        for mbf in mbox_files:
+            for i, m in enumerate(_mb.mbox(mbf)):
+                with open(os.path.join(emails_dir, f"mbox_{os.path.basename(mbf)}_{i:04d}.eml"), "wb") as out:
+                    out.write(m.as_bytes())
+
+    # Fallback: if no obviously-named PBC pdf, use the single remaining PDF candidate
+    # (or the largest) — held-out lists may be named differently (e.g. RequestList.pdf).
+    if not pbc_pdf and pdf_candidates:
+        pbc_pdf = max(pdf_candidates, key=lambda p: os.path.getsize(p))
+        # It was also copied into attachments; that's harmless.
 
     if pbc_pdf:
         shutil.copy(pbc_pdf, os.path.join(data_dir, "PBC_List_FY2026.pdf"))
     else:
-        raise HTTPException(400, "No PBC list PDF found in the bundle (expected a file whose name starts with 'PBC' and ends in .pdf).")
+        raise HTTPException(400, "No PBC list PDF found in the bundle (include the request-list PDF).")
     if profile_pdf:
         shutil.copy(profile_pdf, os.path.join(data_dir, "Client_Profile.pdf"))
 
