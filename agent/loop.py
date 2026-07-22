@@ -260,7 +260,9 @@ def process_email(
 
     # Step 2: Tool-calling loop — agent picks tools until done. Pass the planner's
     # relevant items so extraction can focus its prompt on those (cost + accuracy).
-    run_tool_loop(client, run, email, trace, relevant_items=plan.get("relevant_items", []))
+    run_tool_loop(client, run, email, trace,
+                  max_iterations=run.config.max_iterations_per_email,
+                  relevant_items=plan.get("relevant_items", []))
 
     # Step 3: Verification — verify every item the agent actually touched via
     # update_item_status, not just the planner's predicted list. The agent may update
@@ -407,6 +409,17 @@ def run_tool_loop(
         # Build next turn
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results})
+    else:
+        # Loop hit the iteration cap without the model signaling completion. Record it
+        # in the trace rather than truncating silently — a PCAOB-defensible trace must
+        # show when processing was cut off (an email with many attachments may need a
+        # higher cap or a human).
+        trace.add_step(TraceStep(
+            phase="extraction",
+            decision="max_iterations_reached",
+            reasoning=f"Tool loop hit the {max_iterations}-iteration cap before completing; "
+                      "some attachments on this email may not have been fully processed.",
+        ))
 
 
 def verify_item(
@@ -473,6 +486,11 @@ PCAOB inspector). Beyond mere presence, weigh reliability:
   DIFFERENT item (e.g. a cash-flow statement offered for an income-statement request),
   item X is insufficient — the specific document it asked for did not arrive.
 - Originals > copies/photos/scans; unsigned where a signature is required → insufficient.
+- External confirmations (PCAOB AS 2310): a bank/customer/legal confirmation is only
+  valid if it reached the AUDITOR DIRECTLY. If the client forwarded it, emailed it, or
+  it came back through the client rather than straight from the institution/customer,
+  treat it as a nonresponse → insufficient. Also: a confirmation that must be signed but
+  isn't, or a set where only some of the required confirmations returned, is insufficient.
 
 You must call the verification_verdict tool with your decision."""
 
