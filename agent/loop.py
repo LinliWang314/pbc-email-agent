@@ -183,18 +183,30 @@ _RELEVANCE_HINTS = _re.compile(
 )
 
 
-def _fast_skip_reason(email: EmailMessage) -> str | None:
+def _fast_skip_reason(email: EmailMessage, direction: str = "unknown") -> str | None:
     """
     Return a reason string if this email can be safely skipped without an LLM call,
-    else None. Conservative: only skips when there are NO attachments AND the body has
-    no PBC-relevance hints and is short (a brief acknowledgement, not a substantive ask).
+    else None. Two conservative rules:
+
+    1. An email from the AUDITOR with NO attachments is a request/reminder — by
+       definition it carries no client evidence, so it cannot change any item's status.
+       The auditor naturally names PBC items when requesting them, so we skip these
+       regardless of keywords. (This is the main volume lever on large mailboxes, where
+       a big fraction of mail is the audit team's own requests/chasers.)
+    2. Any email (either side) with no attachments, no PBC-relevance hints, and a short
+       body is a brief acknowledgement — safe to skip.
+
+    Anything with an attachment always defers to the agent.
     """
     if email.attachments:
         return None  # any attachment → let the agent look at it
+
+    if direction == "auditor":
+        return "auditor request/reminder with no attachments — carries no client evidence"
+
     body = (email.body or "").strip()
     if _RELEVANCE_HINTS.search(body) or _RELEVANCE_HINTS.search(email.subject or ""):
-        return None  # mentions something PBC-ish → defer to the planner
-    # No attachments, no relevance hints. Short acknowledgements are safe to skip.
+        return None  # client mentions something PBC-ish → defer to the planner
     if len(body) <= 200:
         return "no attachments and body is a brief acknowledgement with no PBC-relevant terms"
     return None  # longer body with no hints — still let the LLM decide, to be safe
@@ -213,12 +225,13 @@ def process_email(
     """
     trace = AgentTrace(email_id=email.message_id, subject=email.subject)
 
-    # Step 0: Deterministic fast-skip (no LLM). Skips emails that have no attachments
-    # AND whose body shows no sign of PBC-relevant content — e.g. "Working on it — J."
-    # This is the main wall-clock lever on large mailboxes (a whole plan→act→verify chain
-    # avoided per skipped email). Conservative by design: any attachment, or any hint of
-    # relevance, defers to the LLM planner. The skip + its reason are recorded in the trace.
-    skip_reason = _fast_skip_reason(email)
+    # Step 0: Deterministic fast-skip (no LLM). Skips auditor requests/reminders with no
+    # attachments (carry no client evidence) and brief acknowledgements. This is the main
+    # wall-clock/cost lever on large mailboxes, where much of the volume is the audit
+    # team's own request and chaser emails. Anything with an attachment defers to the agent.
+    from agent.ingest import email_direction
+    _dir = email_direction(email, getattr(run, "client_domains", set()))
+    skip_reason = _fast_skip_reason(email, direction=_dir)
     if skip_reason:
         trace.add_step(TraceStep(
             phase="plan",
