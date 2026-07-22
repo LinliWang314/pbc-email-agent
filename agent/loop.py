@@ -97,6 +97,7 @@ def run_agent(
     config: AgentConfig | None = None,
     client_contacts: dict | None = None,
     engagement_info: dict | None = None,
+    progress_cb=None,
 ) -> AgentRun:
     """
     Main entry point. Processes all emails against the PBC list.
@@ -152,16 +153,34 @@ def run_agent(
     # linearly. Shared-state writes (tracker, cost, parsed docs) are guarded by a lock
     # in tools.registry / tracker_ops; the LLM calls happen outside any lock.
     ordered = sorted(emails, key=lambda e: e.date)
+    total = len(ordered)
+    import threading as _thr
+    _done = {"n": 0}
+    _plock = _thr.Lock()
+
+    def _one(email):
+        t = process_email(client, run, email)
+        if progress_cb:
+            with _plock:
+                _done["n"] += 1
+                try:
+                    progress_cb(_done["n"], total)
+                except Exception:
+                    pass
+        return t
+
     if config.max_workers > 1 and len(ordered) > 1:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=config.max_workers) as pool:
-            traces = list(pool.map(lambda e: process_email(client, run, e), ordered))
+            traces = list(pool.map(_one, ordered))
         run.traces.extend(traces)
     else:
         for email in ordered:
-            run.traces.append(process_email(client, run, email))
+            run.traces.append(_one(email))
 
     # Phase 2: Generate follow-up drafts (needs the full tracker state, so it runs last)
+    if progress_cb:
+        progress_cb(total, total, phase="drafting follow-ups")
     followup_trace = generate_followups(client, run)
     run.traces.append(followup_trace)
 

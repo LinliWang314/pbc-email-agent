@@ -115,6 +115,7 @@
             <button class="btn" style="background:#7c3aed;color:#fff;" onclick="uploadBundle()">⤴ Upload &amp; run a .zip bundle</button>
         </div>
         <div class="view-hint" style="margin-top:-0.5rem;">Upload a .zip containing the PBC list PDF, the <code>.eml</code> emails, and the attachments (any folder layout). Or run the bundled sample.</div>
+        <div id="run-progress" style="color:#2563eb;font-size:0.9rem;margin-bottom:0.75rem;min-height:1.2rem;"></div>
         <div class="summary-chips" id="summary-chips"></div>
 
         <div id="view-tracker">
@@ -190,7 +191,12 @@
                 await new Promise(r => setTimeout(r, 2000));
                 let s;
                 try { s = await (await fetch('/api/status')).json(); } catch { continue; }
-                if (s.state === 'running') { btn.textContent = '⏳ Running…'; continue; }
+                if (s.state === 'running') {
+                    const p = s.progress;
+                    btn.textContent = p ? `⏳ ${p.done}/${p.total}` : '⏳ Running…';
+                    document.getElementById('run-progress').textContent = s.message || 'Agent run in progress…';
+                    continue;
+                }
                 if (s.state === 'error') {
                     btn.textContent = '✗ Error'; btn.disabled = false;
                     alert('Run failed: ' + (s.message || 'unknown'));
@@ -200,11 +206,12 @@
                     renderBanner(s);
                     await Promise.all([loadTracker(), loadTraces(), loadFollowups(), loadCost()]);
                     btn.textContent = '✓ Complete';
-                    setTimeout(() => { btn.textContent = '▶ Run Agent'; btn.disabled = false; }, 2500);
+                    document.getElementById('run-progress').textContent = '';
+                    setTimeout(() => { btn.textContent = '▶ Run on sample'; btn.disabled = false; }, 2500);
                     return;
                 }
             }
-            btn.textContent = '▶ Run Agent'; btn.disabled = false;
+            btn.textContent = '▶ Run on sample'; btn.disabled = false;
         }
 
         function renderBanner(result) {

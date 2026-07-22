@@ -111,6 +111,15 @@ def _execute_run(config: RunConfig) -> None:
         if workers_env:
             agent_config.max_workers = int(workers_env)
 
+        def _progress(done, total, phase="processing emails"):
+            # Update the shared status so /api/status can report live progress.
+            import time as _t
+            run_status.update({
+                "message": f"{phase.capitalize()}… {done}/{total}",
+                "progress": {"done": done, "total": total, "phase": phase},
+                "_started_at": run_status.get("_started_at", _t.time()),
+            })
+
         current_run = run_agent(
             pbc_items=pbc_items,
             emails=emails,
@@ -120,6 +129,7 @@ def _execute_run(config: RunConfig) -> None:
                 "entity": client_profile.get("entity_name", ""),
                 "fiscal_year_end": client_profile.get("fiscal_year_end", ""),
             },
+            progress_cb=_progress,
         )
         run_status = {
             "state": "complete",
