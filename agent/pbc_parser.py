@@ -57,18 +57,28 @@ def _cache_key(text: str) -> str:
 
 
 def _load_cache(key: str) -> list[dict] | None:
-    cache_file = CACHE_DIR / f"pbc_{key}.json"
-    if cache_file.exists():
-        with open(cache_file) as f:
-            return json.load(f)
+    # Caching is a best-effort optimization; a missing/corrupt/unreadable cache must
+    # never fail the run — just re-parse.
+    try:
+        cache_file = CACHE_DIR / f"pbc_{key}.json"
+        if cache_file.exists():
+            with open(cache_file) as f:
+                return json.load(f)
+    except Exception:
+        pass
     return None
 
 
 def _save_cache(key: str, items: list[dict]) -> None:
-    CACHE_DIR.mkdir(exist_ok=True)
-    cache_file = CACHE_DIR / f"pbc_{key}.json"
-    with open(cache_file, "w") as f:
-        json.dump(items, f, indent=2)
+    # Best-effort: on a read-only filesystem this would otherwise crash the run right
+    # after a successful (paid) parse. Swallow write failures.
+    try:
+        CACHE_DIR.mkdir(exist_ok=True)
+        cache_file = CACHE_DIR / f"pbc_{key}.json"
+        with open(cache_file, "w") as f:
+            json.dump(items, f, indent=2)
+    except Exception:
+        pass
 
 
 PBC_STRUCTURING_PROMPT = """You are parsing a PBC (Prepared-By-Client) list for a financial statement audit.
