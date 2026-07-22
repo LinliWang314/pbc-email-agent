@@ -409,6 +409,13 @@ def run_tool_loop(
                     ))
             break
 
+        # The model often narrates its reasoning as text before/between tool calls.
+        # Capture it so the trace shows WHY, not just WHAT was called.
+        model_thought = " ".join(
+            b.text.strip() for b in response.content
+            if getattr(b, "type", "") == "text" and getattr(b, "text", "").strip()
+        )
+
         # Process tool calls
         tool_results = []
         for block in response.content:
@@ -422,12 +429,16 @@ def run_tool_loop(
                 result = execute_tool(block.name, block.input, run, email)
                 tool_call.tool_output = result
 
+                # Human-readable reasoning: prefer the model's own thought; otherwise
+                # summarize what this tool call did and what it found.
+                reasoning = model_thought or _summarize_tool_step(block.name, block.input, result)
                 trace.add_step(TraceStep(
                     phase="extraction",
-                    decision=f"call_{block.name}",
-                    reasoning=f"Calling {block.name}",
+                    decision=_readable_decision(block.name, block.input),
+                    reasoning=reasoning,
                     tool_call=tool_call,
                 ))
+                model_thought = ""  # attribute the narration to the first tool call only
 
                 tool_results.append({
                     "type": "tool_result",
@@ -449,6 +460,63 @@ def run_tool_loop(
             reasoning=f"Tool loop hit the {max_iterations}-iteration cap before completing; "
                       "some attachments on this email may not have been fully processed.",
         ))
+
+
+def _readable_decision(tool_name: str, tool_input: dict) -> str:
+    """A short, human-readable label for a tool step (shown as the step headline)."""
+    fn = tool_input.get("filename", "")
+    iid = tool_input.get("item_id") or tool_input.get("pbc_item_id", "")
+    labels = {
+        "parse_pdf": f"Read PDF {fn}",
+        "parse_excel": f"Parse spreadsheet {fn}",
+        "ocr_image": f"OCR image {fn}",
+        "parse_zip": f"Open archive {fn}",
+        "classify_document": f"Match {fn} to a PBC item",
+        "extract_fields": f"Extract fields from {fn}" + (f" for {iid}" if iid else ""),
+        "update_item_status": f"Set {iid} → {tool_input.get('status','?')}",
+        "get_item_status": f"Look up {iid}",
+    }
+    return labels.get(tool_name, tool_name)
+
+
+def _summarize_tool_step(tool_name: str, tool_input: dict, result) -> str:
+    """
+    Plain-language summary of what a tool call FOUND — the fallback when the model
+    didn't narrate. Turns "Calling parse_pdf" into "Read 2 pages; found …".
+    """
+    if isinstance(result, dict) and result.get("error"):
+        return f"{tool_name} could not complete: {result['error']}"
+
+    if tool_name == "parse_pdf" and isinstance(result, dict):
+        n = result.get("total_pages", "?")
+        txt = (result.get("full_text") or "").strip().replace("\n", " ")
+        return f"Read {n} page(s). " + (f"Content starts: “{txt[:120]}…”" if txt else "No text layer (likely a scan).")
+    if tool_name == "parse_excel" and isinstance(result, dict):
+        sheets = result.get("sheet_names", [])
+        return f"Parsed spreadsheet — sheets: {', '.join(sheets) or 'n/a'}."
+    if tool_name == "ocr_image" and isinstance(result, dict):
+        txt = (result.get("full_text") or "").strip()
+        return f"OCR result: “{txt[:120]}…”" if txt else "Image detected but no text extracted — manual review."
+    if tool_name == "parse_zip" and isinstance(result, dict):
+        return f"Archive with {result.get('member_count','?')} file(s); parsed the contents."
+    if tool_name == "classify_document" and isinstance(result, dict):
+        cands = result.get("candidates", [])
+        if cands:
+            top = cands[0]
+            return f"Best match: {top['item_id']} (confidence {top.get('confidence','?')}). " + \
+                   (f"Other candidates: {', '.join(c['item_id'] for c in cands[1:3])}." if len(cands) > 1 else "")
+        return "No confident PBC-item match."
+    if tool_name == "extract_fields" and isinstance(result, dict):
+        f = result.get("extracted_fields", {})
+        keys = ", ".join(list(f.keys())[:6])
+        return f"Extracted: {keys or 'no fields'} (with citations)."
+    if tool_name == "update_item_status" and isinstance(result, dict):
+        cv = result.get("citation_verification")
+        note = ""
+        if cv:
+            note = f" Citations verified {cv['verified']}/{cv['total']}."
+        return f"Recorded status “{result.get('new_status','?')}” for {result.get('item_id','?')}.{note}"
+    return f"{tool_name} completed."
 
 
 def verify_item(
