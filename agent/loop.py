@@ -445,6 +445,22 @@ is NOT grounds for "insufficient" — it may simply not have been extracted. Use
 you can point to: wrong period/entity, a threshold provably not met, an explicitly
 incomplete set (N of M received), or an informal artifact where a formal one was required.
 
+EVIDENCE RELIABILITY (PCAOB AS 1105 — this is what makes a verdict defensible to a
+PCAOB inspector). Beyond mere presence, weigh reliability:
+- Independent/external source > client-internal. When the criteria require an item to
+  come from OUTSIDE the client or be sent DIRECTLY to the auditor (bank confirmations,
+  legal letters from external counsel, signed customer confirmations returned to the
+  audit firm), a client-internal copy or a client-forwarded version does NOT satisfy it
+  → insufficient (name the missing independent/direct-delivery requirement).
+- Inquiry/verbal promises are not evidence. A message saying an item is "coming",
+  "in progress", or "will send" is NOT received evidence — such an item stays
+  "not_started" (or Insufficient if partial evidence exists), never "received".
+- Right request, wrong document (answers a different item). If the client submits a
+  document and claims it covers item X, but the document is actually responsive to a
+  DIFFERENT item (e.g. a cash-flow statement offered for an income-statement request),
+  item X is insufficient — the specific document it asked for did not arrive.
+- Originals > copies/photos/scans; unsigned where a signature is required → insufficient.
+
 You must call the verification_verdict tool with your decision."""
 
     evidence_summary = json.dumps({
