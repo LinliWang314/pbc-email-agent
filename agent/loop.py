@@ -245,8 +245,9 @@ def process_email(
         relevant_items=plan.get("relevant_items", []),
     ))
 
-    # Step 2: Tool-calling loop — agent picks tools until done
-    run_tool_loop(client, run, email, trace)
+    # Step 2: Tool-calling loop — agent picks tools until done. Pass the planner's
+    # relevant items so extraction can focus its prompt on those (cost + accuracy).
+    run_tool_loop(client, run, email, trace, relevant_items=plan.get("relevant_items", []))
 
     # Step 3: Verification — verify every item the agent actually touched via
     # update_item_status, not just the planner's predicted list. The agent may update
@@ -330,12 +331,13 @@ def run_tool_loop(
     email: EmailMessage,
     trace: AgentTrace,
     max_iterations: int = 10,
+    relevant_items: list[str] | None = None,
 ) -> None:
     """
     The core tool-calling loop. The agent decides which tools to call
     until it signals completion. Uses Sonnet for complex extraction.
     """
-    system_prompt = build_extraction_prompt(run)
+    system_prompt = build_extraction_prompt(run, relevant_items=relevant_items)
     system_blocks = cached_system(system_prompt)
     messages = [{"role": "user", "content": format_email_for_prompt(email, run)}]
 
@@ -723,12 +725,39 @@ Current PBC tracker state:
 Respond with your plan using the plan_decision tool."""
 
 
-def build_extraction_prompt(run: AgentRun) -> str:
-    """Build the system prompt for the extraction phase."""
-    items_detail = "\n".join(
-        f"  {item.id}: {item.description}\n    Acceptance: {item.acceptance_criteria}"
-        for item in run.tracker.items.values()
-    )
+def build_extraction_prompt(run: AgentRun, relevant_items: list[str] | None = None) -> str:
+    """
+    Build the system prompt for the extraction phase.
+
+    Cost optimization: instead of embedding all 30 items' full acceptance criteria in
+    every call (~1.6k tokens, re-sent each tool-loop turn), we include FULL detail only
+    for the items the planner flagged as relevant to this email, plus a one-line index of
+    the rest (so the agent can still re-classify if the planner missed something). On a
+    typical email that cuts the prompt ~80% and also focuses the model, which reduces
+    mis-binding. Falls back to all items when the planner named none.
+    """
+    items = run.tracker.items
+    relevant = [i for i in (relevant_items or []) if i in items]
+
+    if relevant:
+        detail = "\n".join(
+            f"  {items[i].id}: {items[i].description}\n    Acceptance: {items[i].acceptance_criteria}"
+            for i in relevant
+        )
+        others = "\n".join(
+            f"  {item.id}: [{item.category}] {item.description[:60]}"
+            for iid, item in items.items() if iid not in relevant
+        )
+        items_block = (
+            f"PBC items most relevant to this email (full acceptance criteria):\n{detail}\n\n"
+            f"Other PBC items (brief — re-classify to one of these if the above don't fit):\n{others}"
+        )
+    else:
+        items_block = "PBC items and acceptance criteria:\n" + "\n".join(
+            f"  {item.id}: {item.description}\n    Acceptance: {item.acceptance_criteria}"
+            for item in items.values()
+        )
+
     return f"""You are a PBC document extraction agent for a financial audit.
 
 Your job is to:
@@ -739,8 +768,7 @@ Your job is to:
 
 Always provide citations for extracted data. Be precise about periods, entities, and amounts.
 
-PBC items and acceptance criteria:
-{items_detail}
+{items_block}
 
 Call tools as needed. When done, provide a brief summary of what was found."""
 
