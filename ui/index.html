@@ -43,29 +43,37 @@
         /* Trace view */
         .trace-panel { background: white; border-radius: 8px; padding: 1.25rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
         .trace-panel h3 { font-size: 1rem; margin-bottom: 0.25rem; }
-        .trace-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 0.75rem; }
-        .trace-step { border-left: 3px solid #e0e0e0; padding: 0.5rem 0.9rem; margin: 0.5rem 0; background: #fafbfc; border-radius: 0 4px 4px 0; }
-        .trace-step.plan { border-left-color: #2563eb; }
-        .trace-step.extraction { border-left-color: #7c3aed; }
-        .trace-step.verification { border-left-color: #059669; }
-        .trace-step.followup { border-left-color: #d97706; }
-        .trace-phase { font-size: 0.68rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+        .trace-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 1rem; }
+        .trace-meta .item-tag { display:inline-block; background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; border-radius:4px; padding:0.05rem 0.4rem; margin-right:0.25rem; font-size:0.75rem; font-weight:600; }
+
+        /* Trace as a left-rail timeline */
+        .trace-timeline { position: relative; margin-left: 0.5rem; padding-left: 1.25rem; border-left: 2px solid #e5e9f0; }
+        .trace-step { position: relative; padding: 0.5rem 0.9rem; margin: 0.6rem 0; background: #fafbfc; border-radius: 6px; border: 1px solid #eef1f5; }
+        .trace-step::before { content: ''; position: absolute; left: -1.7rem; top: 0.85rem; width: 11px; height: 11px; border-radius: 50%; background: #cbd5e1; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1; }
+        .trace-step.plan::before { background: #2563eb; box-shadow: 0 0 0 1px #2563eb; }
+        .trace-step.extraction::before { background: #7c3aed; box-shadow: 0 0 0 1px #7c3aed; }
+        .trace-step.verification::before { background: #059669; box-shadow: 0 0 0 1px #059669; }
+        .trace-step.followup::before { background: #d97706; box-shadow: 0 0 0 1px #d97706; }
+        .trace-phase { font-size: 0.66rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.06em; }
         .trace-step.plan .trace-phase { color: #2563eb; }
         .trace-step.extraction .trace-phase { color: #7c3aed; }
         .trace-step.verification .trace-phase { color: #059669; }
         .trace-step.followup .trace-phase { color: #d97706; }
         .trace-decision { font-weight: 600; margin: 0.15rem 0; font-size: 0.88rem; }
         .trace-reasoning { font-size: 0.85rem; color: #475569; line-height: 1.5; }
-        .tool-call { background: #1e293b; color: #e2e8f0; padding: 0.5rem 0.7rem; border-radius: 4px; margin-top: 0.4rem; font-family: 'SF Mono', Menlo, monospace; font-size: 0.78rem; overflow-x: auto; }
-        .tool-call .tname { color: #7dd3fc; font-weight: 600; }
+        .tool-call { background: #1e293b; color: #e2e8f0; padding: 0.45rem 0.7rem; border-radius: 4px; margin-top: 0.45rem; font-family: 'SF Mono', Menlo, monospace; font-size: 0.78rem; overflow-x: auto; }
+        .tool-call .tname { color: #7dd3fc; font-weight: 700; }
+        .tool-arg { color: #94a3b8; }
 
-        .verdict { padding: 0.6rem 0.9rem; border-radius: 6px; margin-top: 0.5rem; font-size: 0.85rem; }
-        .verdict-sufficient { background: #f0fdf4; border: 1px solid #86efac; }
-        .verdict-insufficient { background: #fffbeb; border: 1px solid #fcd34d; }
-        .verdict-not_started { background: #f8fafc; border: 1px solid #e2e8f0; }
-        .verdict-title { font-weight: 700; }
-        .citation { display: inline-block; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.75rem; margin: 0.15rem 0.25rem 0 0; font-family: monospace; }
+        .verdict { padding: 0.7rem 0.9rem; border-radius: 8px; margin-top: 0.5rem; font-size: 0.86rem; border-left: 4px solid; }
+        .verdict-sufficient { background: #f0fdf4; border: 1px solid #86efac; border-left-color: #16a34a; }
+        .verdict-insufficient { background: #fffbeb; border: 1px solid #fcd34d; border-left-color: #d97706; }
+        .verdict-under_review { background: #eff6ff; border: 1px solid #bfdbfe; border-left-color: #2563eb; }
+        .verdict-not_started { background: #f8fafc; border: 1px solid #e2e8f0; border-left-color: #94a3b8; }
+        .verdict-title { font-weight: 700; display:block; margin-bottom:0.25rem; }
+        .citation { display: inline-block; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; padding: 0.12rem 0.45rem; font-size: 0.75rem; margin: 0.2rem 0.25rem 0 0; font-family: monospace; }
         .citation.unverified { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+        .cites-label { font-size: 0.72rem; color: #64748b; margin-top: 0.4rem; }
 
         .followup-card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
         .followup-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 1rem; }
@@ -242,27 +250,46 @@
             renderTraces(TRACES);
         }
 
+        const PHASE_ICON = {plan:'🧭', extraction:'🔧', verification:'✔️', followup:'✉️'};
+
         function renderTraces(traces) {
             const container = document.getElementById('traces-container');
-            container.innerHTML = traces.map(trace => `
-                <div class="trace-panel" id="trace-${cssId(trace.email_id)}">
+            // Hide pure no-op skips by default to reduce noise, but keep a count.
+            const meaningful = traces.filter(t => t.steps.some(s => s.decision !== 'skip') || t.verifier_verdicts.length);
+            const skipped = traces.length - meaningful.length;
+            const head = skipped ? `<div class="view-hint">${meaningful.length} email(s) with agent activity shown · ${skipped} skipped as irrelevant (no LLM cost).</div>` : '';
+            container.innerHTML = head + (meaningful.map(trace => {
+                const items = trace.affected_items.map(i => `<span class="item-tag">${i}</span>`).join('') || '<span style="color:#94a3b8">none</span>';
+                return `<div class="trace-panel" id="trace-${cssId(trace.email_id)}">
                     <h3>${escapeHtml(trace.subject || trace.email_id)}</h3>
-                    <div class="trace-meta">Affected items: ${trace.affected_items.join(', ') || 'none'}</div>
-                    ${trace.steps.map(renderStep).join('')}
+                    <div class="trace-meta">Items touched: ${items}</div>
+                    <div class="trace-timeline">
+                        ${trace.steps.map((s, i) => renderStep(s, i + 1)).join('')}
+                    </div>
                     ${trace.verifier_verdicts.map(renderVerdict).join('')}
-                </div>`).join('') || '<p class="loading">No traces.</p>';
+                </div>`;
+            }).join('') || '<p class="loading">No traces.</p>');
         }
 
-        function renderStep(step) {
+        function renderStep(step, num) {
+            const icon = PHASE_ICON[step.phase] || '•';
             let toolHtml = '';
             if (step.tool_call) {
                 const ci = step.tool_call.tool_input || {};
-                const cites = (ci.citations || []).map(c =>
-                    `<span class="citation">${c.type}:${escapeHtml(String(c.reference||''))}</span>`).join('');
-                toolHtml = `<div class="tool-call"><span class="tname">${step.tool_call.tool_name}</span>(${escapeHtml(shortJson(ci))})</div>${cites}`;
+                // Readable one-line arg summary (key fields), not raw JSON.
+                const keys = ['filename', 'item_id', 'status', 'pbc_item_id'];
+                const argParts = keys.filter(k => ci[k] != null).map(k => `${k}=${escapeHtml(String(ci[k]))}`);
+                const argStr = argParts.join(', ') || Object.keys(ci).slice(0, 3).join(', ');
+                toolHtml = `<div class="tool-call">🔧 <span class="tname">${escapeHtml(step.tool_call.tool_name)}</span>(<span class="tool-arg">${escapeHtml(argStr)}</span>)</div>`;
+                // Citations with their actual claimed value, if present.
+                const cites = (ci.citations || []);
+                if (cites.length) {
+                    toolHtml += `<div class="cites-label">Citations:</div>` +
+                        cites.map(c => `<span class="citation">${escapeHtml(String(c.type||''))}:${escapeHtml(String(c.reference||''))} → ${escapeHtml(String(c.text||'').substring(0,40))}</span>`).join('');
+                }
             }
             return `<div class="trace-step ${step.phase}">
-                <div class="trace-phase">${step.phase}</div>
+                <div class="trace-phase">${icon} Step ${num} · ${step.phase}</div>
                 <div class="trace-decision">${escapeHtml(step.decision)}</div>
                 <div class="trace-reasoning">${escapeHtml(step.reasoning || '')}</div>
                 ${toolHtml}
@@ -270,10 +297,11 @@
         }
 
         function renderVerdict(v) {
+            const label = {sufficient:'SUFFICIENT ✓', insufficient:'INSUFFICIENT ⚠', under_review:'UNDER REVIEW — needs a human', not_started:'NOT STARTED'}[v.verdict] || v.verdict.toUpperCase();
             return `<div class="verdict verdict-${v.verdict}">
-                <span class="verdict-title">Verifier · ${v.item_id}: ${v.verdict.toUpperCase()}</span><br>
+                <span class="verdict-title">Verifier verdict · ${escapeHtml(v.item_id)}: ${label}</span>
                 ${escapeHtml(v.reasoning)}
-                ${v.missing && v.missing.length ? `<br><em>Missing: ${v.missing.map(escapeHtml).join(', ')}</em>` : ''}
+                ${v.missing && v.missing.length ? `<div style="margin-top:0.4rem"><b>Still missing:</b> ${v.missing.map(escapeHtml).join(', ')}</div>` : ''}
             </div>`;
         }
 
