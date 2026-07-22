@@ -21,7 +21,7 @@ Show the deployed UI tracker populated. Point at: statuses, evidence, confidence
 
 ## 1. The agent loop — the core [3:30]  ← spend the most time here
 
-Open `agent/loop.py`. Walk `run_agent` → `process_email` (line 141).
+Open `agent/loop.py`. Walk `run_agent` → `process_email` (grep the function name).
 
 Say the three-phase shape out loud:
 

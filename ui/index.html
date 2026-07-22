@@ -152,13 +152,12 @@
         }
 
         async function startRun() {
-            const dataDir = document.getElementById('data-dir').value;
             const btn = document.querySelector('.btn-run');
             btn.textContent = '⏳ Running…'; btn.disabled = true;
             try {
                 const resp = await fetch('/api/run', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({data_dir: dataDir, max_cost_usd: 2.0})
+                    body: JSON.stringify({max_cost_usd: 2.0})
                 });
                 const kick = await resp.json();
                 if (!resp.ok) throw new Error(kick.detail || 'Run failed to start');
