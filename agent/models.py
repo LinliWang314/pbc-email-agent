@@ -19,6 +19,8 @@ class Evidence:
     # citation check ran). Kept separate from the blended display `confidence` so the
     # latter can be recomputed against the final verifier verdict without double-blending.
     citation_conf: float | None = None
+    # True once a newer version of the same document supersedes this one (lineage kept).
+    superseded: bool = False
 
     def dict(self) -> dict:
         return {
@@ -28,6 +30,7 @@ class Evidence:
             "citations": self.citations,
             "confidence": self.confidence,
             "citation_conf": self.citation_conf,
+            "superseded": self.superseded,
         }
 
 

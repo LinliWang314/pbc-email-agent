@@ -40,16 +40,21 @@ def test_does_not_skip_long_body():
     assert _fast_skip_reason(_email(long_body)) is None
 
 
-def test_skips_auditor_request_without_attachment():
-    # An auditor request/reminder with no attachment carries no client evidence → skip,
-    # even though it names PBC items (auditors always do when requesting).
-    e = _email("Please send PBC-04 bank statements and PBC-11 confirmations.")
-    assert _fast_skip_reason(e, direction="auditor") is not None
-    # But the SAME email from the client is NOT skipped (they might be submitting).
-    assert _fast_skip_reason(e, direction="client") is None
+def test_skips_pure_acknowledgement_either_side():
+    # "Thanks, received." carries no status info → safe to skip regardless of sender.
+    assert _fast_skip_reason(_email("Thanks, received."), direction="auditor") is not None
+    assert _fast_skip_reason(_email("Great to meet you at the conference"), direction="client") is not None
 
 
-def test_never_skips_auditor_email_with_attachment():
+def test_does_not_skip_auditor_rejection_or_gap():
+    # Auditor messages that reject a submission or name what's missing MUST be processed —
+    # they are what make an item Insufficient. This was a real bug (over-aggressive skip).
+    assert _fast_skip_reason(_email("we'll need the formal typed reconciliation before we can accept it"), direction="auditor") is None
+    assert _fast_skip_reason(_email("also send the money-market and Peak National statements"), direction="auditor") is None
+    assert _fast_skip_reason(_email("Received. Still need the remaining meetings through year-end."), direction="auditor") is None
+
+
+def test_never_skips_email_with_attachment():
     att = Attachment(filename="x.pdf", content_type="application/pdf", size_bytes=10, file_path="")
     e = _email("see attached", attachments=[att])
     assert _fast_skip_reason(e, direction="auditor") is None
@@ -74,7 +79,8 @@ if __name__ == "__main__":
     test_does_not_skip_when_attachment_present()
     test_does_not_skip_pbc_mention()
     test_does_not_skip_long_body()
-    test_skips_auditor_request_without_attachment()
-    test_never_skips_auditor_email_with_attachment()
+    test_skips_pure_acknowledgement_either_side()
+    test_does_not_skip_auditor_rejection_or_gap()
+    test_never_skips_email_with_attachment()
     test_real_sample_emails()
     print("All fast-skip tests passed ✓")

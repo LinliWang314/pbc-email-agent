@@ -228,16 +228,19 @@
             const data = await (await fetch('/api/tracker')).json();
             const items = Object.values(data.items);
             document.getElementById('tracker-body').innerHTML = items.map(item => {
-                const ev = item.evidence[0];
-                const conf = ev ? Math.round(ev.confidence * 100) : null;
+                // Current version = the latest non-superseded evidence (falls back to last).
+                const current = [...item.evidence].reverse().find(e => !e.superseded) || item.evidence[item.evidence.length-1];
+                const conf = current ? Math.round(current.confidence * 100) : null;
                 const confHtml = conf === null ? '—' :
                     `<span class="conf-bar"><span class="conf-fill ${conf<70?'low':''}" style="width:${conf}%"></span></span> ${conf}%`;
+                const evList = item.evidence.map(e =>
+                    e.superseded ? `<s style="color:#94a3b8">${e.filename}</s>` : e.filename).join('<br>') || '—';
                 return `<tr class="item-row" onclick="openTrace('${item.id}')">
                     <td><b>${item.id}</b></td>
                     <td><span class="cat-pill">${item.category}</span></td>
                     <td>${item.description.substring(0,90)}${item.description.length>90?'…':''}</td>
                     <td><span class="status-badge status-${item.status.toLowerCase().replace(/ /g,'-')}">${item.status}</span></td>
-                    <td>${item.evidence.map(e=>e.filename).join('<br>') || '—'}</td>
+                    <td>${evList}</td>
                     <td style="white-space:nowrap">${confHtml}</td>
                 </tr>`;
             }).join('');

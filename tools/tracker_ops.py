@@ -72,7 +72,10 @@ def _do_update(
             citation_conf=citation_conf,
         )
 
-        # Version tracking: check if this supersedes an existing file
+        # Version tracking: if this supersedes an earlier version of the same document,
+        # record the lineage AND mark the older evidence as superseded so it no longer
+        # counts as the current version (the brief wants the LATEST version surfaced,
+        # with lineage kept). We don't delete the old one — auditors need the trail.
         existing = [e for e in item.evidence if _is_same_document(e.filename, evidence_filename)]
         if existing:
             item.versions.append({
@@ -80,6 +83,8 @@ def _do_update(
                 "superseded_by": evidence_filename,
                 "reason": "newer version detected",
             })
+            for e in existing:
+                e.superseded = True
 
         item.evidence.append(evidence)
 

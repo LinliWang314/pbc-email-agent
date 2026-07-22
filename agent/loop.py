@@ -201,33 +201,43 @@ _RELEVANCE_HINTS = _re.compile(
     _re.IGNORECASE,
 )
 
+# Rejection / gap / outstanding language — an auditor (or client) message with no
+# attachment can still change status by rejecting a submission or naming what's missing.
+# These must NOT be fast-skipped. E.g. "still need", "also send", "we can't accept".
+_REJECTION_HINTS = _re.compile(
+    r"still need|also (?:send|need|provide)|remaining|outstanding|"
+    r"can'?t accept|cannot accept|before we can|not sufficient|insufficient|"
+    r"missing|incomplete|rejected?|need the|please (?:also |re)?send|"
+    r"waiting on|follow up|resend|wrong|doesn'?t (?:match|cover)|need a formal",
+    _re.IGNORECASE,
+)
+
 
 def _fast_skip_reason(email: EmailMessage, direction: str = "unknown") -> str | None:
     """
     Return a reason string if this email can be safely skipped without an LLM call,
-    else None. Two conservative rules:
+    else None.
 
-    1. An email from the AUDITOR with NO attachments is a request/reminder — by
-       definition it carries no client evidence, so it cannot change any item's status.
-       The auditor naturally names PBC items when requesting them, so we skip these
-       regardless of keywords. (This is the main volume lever on large mailboxes, where
-       a big fraction of mail is the audit team's own requests/chasers.)
-    2. Any email (either side) with no attachments, no PBC-relevance hints, and a short
-       body is a brief acknowledgement — safe to skip.
-
-    Anything with an attachment always defers to the agent.
+    IMPORTANT: an auditor email with no attachment is NOT automatically skippable — the
+    auditor's own messages often carry status-affecting information: rejecting a submission
+    ("we need the formal typed reconciliation before we can accept it"), pointing out an
+    incomplete set ("also send the money-market and Peak National statements"), or noting
+    outstanding items. Dropping these would hurt insufficiency detection. So we only fast-
+    skip when the body has NO PBC-relevance hints AND no rejection/gap language AND is a
+    short acknowledgement — from either side. Anything with an attachment defers to the agent.
     """
     if email.attachments:
         return None  # any attachment → let the agent look at it
 
-    if direction == "auditor":
-        return "auditor request/reminder with no attachments — carries no client evidence"
-
     body = (email.body or "").strip()
-    if _RELEVANCE_HINTS.search(body) or _RELEVANCE_HINTS.search(email.subject or ""):
-        return None  # client mentions something PBC-ish → defer to the planner
+    subject = email.subject or ""
+    if _RELEVANCE_HINTS.search(body) or _RELEVANCE_HINTS.search(subject):
+        return None  # mentions something PBC-ish → defer to the planner
+    if _REJECTION_HINTS.search(body):
+        return None  # rejection / gap / "still need" language → status-relevant, defer
+    # No attachments, no PBC hints, no rejection language. A short note is a safe skip.
     if len(body) <= 200:
-        return "no attachments and body is a brief acknowledgement with no PBC-relevant terms"
+        return "no attachments; brief acknowledgement with no PBC-relevant or gap language"
     return None  # longer body with no hints — still let the LLM decide, to be safe
 
 
